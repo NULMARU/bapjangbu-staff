@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#2f6f4f">
+<title>밥장부 직원용</title>
+<style>
+  /* ===== 기본 ===== */
+  :root {
+    --green: #2f6f4f;
+    --green-dark: #245a3f;
+    --green-light: #e8f3ed;
+    --red: #c0392b;
+    --red-light: #fdecea;
+    --gray-bg: #f4f5f6;
+    --gray-line: #e2e4e6;
+    --gray-text: #7a828a;
+    --text: #22282e;
+    --radius: 14px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Malgun Gothic", "Noto Sans KR", sans-serif;
+    background: var(--gray-bg);
+    color: var(--text);
+    font-size: 16px;
+  }
+  #app { max-width: 480px; margin: 0 auto; min-height: 100dvh; display: flex; flex-direction: column; background: var(--gray-bg); }
+
+  /* ===== 화면 전환 ===== */
+  .screen { display: none; flex: 1; flex-direction: column; padding: 16px 16px 90px; }
+  .screen.active { display: flex; }
+
+  /* ===== 하단 탭바 ===== */
+  #tabbar {
+    position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+    width: 100%; max-width: 480px; display: none;
+    background: #fff; border-top: 1px solid var(--gray-line);
+    padding-bottom: env(safe-area-inset-bottom);
+    z-index: 50;
+  }
+  #tabbar.show { display: flex; }
+  #tabbar button {
+    flex: 1; padding: 10px 0 12px; border: none; background: none;
+    font-size: 12px; color: var(--gray-text); cursor: pointer;
+  }
+  #tabbar button .ico { display: block; font-size: 22px; margin-bottom: 2px; }
+  #tabbar button.on { color: var(--green); font-weight: 700; }
+
+  /* ===== 공통 요소 ===== */
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .sub { color: var(--gray-text); font-size: 13px; margin-bottom: 16px; }
+  .card { background: #fff; border-radius: var(--radius); padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+  .btn {
+    display: block; width: 100%; padding: 15px; border: none; border-radius: var(--radius);
+    background: var(--green); color: #fff; font-size: 17px; font-weight: 700; cursor: pointer;
+  }
+  .btn:active { background: var(--green-dark); }
+  .btn.ghost { background: #fff; color: var(--green); border: 1.5px solid var(--green); }
+  .btn.small { width: auto; display: inline-block; padding: 9px 16px; font-size: 14px; border-radius: 10px; }
+  .btn.danger { background: var(--red); }
+  .btn.gray { background: #fff; color: var(--gray-text); border: 1.5px solid var(--gray-line); }
+  input[type=text], input[type=date], input[type=number], select {
+    width: 100%; padding: 13px; border: 1.5px solid var(--gray-line); border-radius: 12px;
+    font-size: 16px; background: #fff; color: var(--text);
+  }
+  input:focus, select:focus { outline: none; border-color: var(--green); }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; }
+  .label { font-size: 13px; font-weight: 700; color: var(--gray-text); margin: 14px 0 6px; }
+  .empty { text-align: center; color: var(--gray-text); padding: 36px 0; font-size: 14px; line-height: 1.7; }
+
+  /* ===== ⓪ 최초 설정 ===== */
+  #screen-setup { justify-content: center; padding-bottom: 16px; }
+  #screen-setup .logo { text-align: center; font-size: 46px; margin-bottom: 8px; }
+  #screen-setup h1 { text-align: center; font-size: 24px; }
+  #screen-setup .sub { text-align: center; }
+
+  /* ===== ① 홈 ===== */
+  .total-card { background: var(--green); color: #fff; }
+  .total-card .t-label { font-size: 13px; opacity: .85; }
+  .total-card .t-amount { font-size: 32px; font-weight: 800; margin-top: 2px; }
+  .total-card .t-region { font-size: 12px; opacity: .75; margin-top: 6px; }
+
+  .nl-box textarea {
+    width: 100%; border: none; resize: none; font-size: 16px; font-family: inherit;
+    background: none; color: var(--text); height: 48px; line-height: 1.5;
+  }
+  .nl-box textarea:focus { outline: none; }
+  .nl-hint { font-size: 12px; color: var(--gray-text); margin-top: 4px; }
+
+  .store-card { display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
+  .store-card .s-name { font-size: 17px; font-weight: 700; }
+  .store-card .s-meta { font-size: 12px; color: var(--gray-text); margin-top: 3px; }
+  .store-card .s-bal { font-size: 19px; font-weight: 800; color: var(--green); text-align: right; }
+  .store-card .s-bal.minus { color: var(--red); }
+  .store-card .s-bal-label { font-size: 11px; color: var(--gray-text); text-align: right; }
+
+  /* ===== 확인 카드(자연어) ===== */
+  .confirm-card { border: 2px solid var(--green); }
+  .confirm-card .c-title { font-weight: 800; color: var(--green); margin-bottom: 10px; font-size: 15px; }
+  .confirm-card table { width: 100%; font-size: 15px; border-collapse: collapse; }
+  .confirm-card td { padding: 4px 0; }
+  .confirm-card td:first-child { color: var(--gray-text); width: 74px; }
+  .confirm-card .c-warn { font-size: 13px; color: var(--red); margin-top: 8px; }
+  .confirm-card .c-note { font-size: 13px; color: var(--gray-text); margin-top: 8px; }
+
+  /* ===== ② 입력 ===== */
+  .toggle { display: flex; background: #e9ebed; border-radius: 12px; padding: 4px; margin-bottom: 14px; }
+  .toggle button {
+    flex: 1; padding: 12px; border: none; border-radius: 9px; background: none;
+    font-size: 16px; font-weight: 700; color: var(--gray-text); cursor: pointer;
+  }
+  .toggle button.on { background: #fff; color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+  .toggle button.on.use { color: var(--red); }
+  .toggle button.on.charge { color: var(--green); }
+
+  .amount-display {
+    text-align: center; font-size: 36px; font-weight: 800; padding: 14px 0;
+    background: #fff; border-radius: var(--radius); margin-bottom: 12px; min-height: 78px;
+  }
+  .amount-display .won { font-size: 20px; color: var(--gray-text); font-weight: 400; }
+  .quick-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+  .quick-grid button {
+    padding: 15px 0; border: 1.5px solid var(--gray-line); border-radius: 12px; background: #fff;
+    font-size: 15px; font-weight: 700; cursor: pointer; color: var(--text);
+  }
+  .quick-grid button:active { background: var(--green-light); border-color: var(--green); }
+  .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+  .keypad button {
+    padding: 16px 0; border: none; border-radius: 12px; background: #fff;
+    font-size: 22px; font-weight: 700; cursor: pointer; color: var(--text);
+    box-shadow: 0 1px 2px rgba(0,0,0,.05);
+  }
+  .keypad button:active { background: var(--gray-line); }
+
+  /* ===== ③ 내역 ===== */
+  .tx-date { font-size: 13px; font-weight: 700; color: var(--gray-text); margin: 16px 0 6px; }
+  .tx-item { display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: 13px 16px; }
+  .tx-item .x-store { font-weight: 700; font-size: 15px; }
+  .tx-item .x-memo { font-size: 12px; color: var(--gray-text); margin-top: 2px; }
+  .tx-item .x-amount { font-size: 16px; font-weight: 800; }
+  .tx-item .x-amount.charge { color: var(--green); }
+  .tx-item .x-amount.use { color: var(--red); }
+  .tx-item .x-method { font-size: 11px; color: var(--gray-text); text-align: right; margin-top: 2px; }
+
+  .mgmt-list { font-size: 15px; }
+  .mgmt-list .m-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--gray-line); }
+  .mgmt-list .m-row:last-child { border-bottom: none; }
+
+  /* ===== 모달 ===== */
+  .modal-bg {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 100;
+    align-items: flex-end; justify-content: center;
+  }
+  .modal-bg.show { display: flex; }
+  .modal {
+    background: #fff; width: 100%; max-width: 480px; border-radius: 20px 20px 0 0;
+    padding: 20px 16px calc(20px + env(safe-area-inset-bottom)); max-height: 85dvh; overflow-y: auto;
+  }
+  .modal h2 { font-size: 18px; margin-bottom: 14px; }
+  .search-result { max-height: 260px; overflow-y: auto; margin-top: 8px; }
+  .search-result .sr-item {
+    padding: 13px; border-bottom: 1px solid var(--gray-line); cursor: pointer; font-size: 15px;
+  }
+  .search-result .sr-item:active { background: var(--green-light); }
+  .search-result .sr-item .sr-dong { color: var(--gray-text); font-size: 13px; margin-left: 6px; }
+  .search-result .sr-item.registered { color: var(--gray-text); }
+
+  /* ===== 토스트 ===== */
+  #toast {
+    position: fixed; bottom: 96px; left: 50%; transform: translateX(-50%);
+    background: rgba(34,40,46,.92); color: #fff; padding: 11px 20px; border-radius: 24px;
+    font-size: 14px; z-index: 200; display: none; white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ⓪ 최초 설정 -->
+  <section class="screen" id="screen-setup">
+    <div class="logo">🍚</div>
+    <h1>밥장부 직원용</h1>
+    <p class="sub">음식점 선금을 내 폰에서 간편하게 관리해요.<br>인적사항은 받지 않아요. 이용 지역만 알려주세요.</p>
+    <div class="card">
+      <div class="label">이용 지역 (시·군·구)</div>
+      <select id="setup-region">
+        <option value="광진구" selected>서울 광진구</option>
+        <option>서울 강남구</option><option>서울 강동구</option><option>서울 강북구</option>
+        <option>서울 강서구</option><option>서울 관악구</option><option>서울 구로구</option>
+        <option>서울 금천구</option><option>서울 노원구</option><option>서울 도봉구</option>
+        <option>서울 동대문구</option><option>서울 동작구</option><option>서울 마포구</option>
+        <option>서울 서대문구</option><option>서울 서초구</option><option>서울 성동구</option>
+        <option>서울 성북구</option><option>서울 송파구</option><option>서울 양천구</option>
+        <option>서울 영등포구</option><option>서울 용산구</option><option>서울 은평구</option>
+        <option>서울 종로구</option><option>서울 중구</option><option>서울 중랑구</option>
+        <option value="__free__">직접 입력…</option>
+      </select>
+      <div id="setup-free-wrap" style="display:none; margin-top:8px;">
+        <input type="text" id="setup-free" placeholder="예: 경기 구리시">
+      </div>
+    </div>
+    <button class="btn" id="btn-setup-done">시작하기</button>
+  </section>
+
+  <!-- ① 홈(현황) -->
+  <section class="screen" id="screen-home">
+    <div class="card total-card">
+      <div class="t-label">전체 남은 선금</div>
+      <div class="t-amount" id="home-total">0원</div>
+      <div class="t-region" id="home-region"></div>
+    </div>
+
+    <div class="card nl-box">
+      <textarea id="nl-input" placeholder="문장으로 입력해 보세요&#10;예) 강경불고기에 오늘 12000원 사용했어" enterkeyhint="done"></textarea>
+      <div class="nl-hint">💬 음식점명·금액·날짜를 자동으로 알아들어요</div>
+      <button class="btn small" id="btn-nl-parse" style="margin-top:8px;">인식하기</button>
+    </div>
+
+    <div id="nl-confirm"></div>
+
+    <div class="label">내 음식점</div>
+    <div id="home-stores"></div>
+    <button class="btn ghost" id="btn-home-add-store">+ 음식점 등록</button>
+  </section>
+
+  <!-- ② 입력 -->
+  <section class="screen" id="screen-input">
+    <h1>기록하기</h1>
+    <p class="sub">음식점을 고르고 금액을 누르면 끝!</p>
+
+    <div class="toggle">
+      <button id="tg-use" class="on use">사용</button>
+      <button id="tg-charge">충전</button>
+    </div>
+
+    <div class="label">음식점</div>
+    <select id="input-store"></select>
+
+    <div class="amount-display" id="amount-display">0<span class="won">원</span></div>
+
+    <div class="quick-grid" id="quick-grid"></div>
+
+    <div class="keypad">
+      <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
+      <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
+      <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
+      <button data-k="00">00</button><button data-k="0">0</button><button data-k="back">⌫</button>
+    </div>
+
+    <div class="row">
+      <div>
+        <div class="label">날짜</div>
+        <input type="date" id="input-date">
+      </div>
+      <div>
+        <div class="label">메모 (선택)</div>
+        <input type="text" id="input-memo" placeholder="예: 점심">
+      </div>
+    </div>
+
+    <button class="btn" id="btn-save-tx" style="margin-top:16px;">저장</button>
+  </section>
+
+  <!-- ③ 내역·관리 -->
+  <section class="screen" id="screen-history">
+    <h1>내역·관리</h1>
+    <div class="label">음식점 필터</div>
+    <select id="history-filter"><option value="">전체</option></select>
+    <div id="history-list"></div>
+
+    <div class="label" style="margin-top:24px;">음식점 관리</div>
+    <div class="card mgmt-list" id="mgmt-stores"></div>
+    <button class="btn ghost" id="btn-hist-add-store">+ 음식점 등록</button>
+
+    <div class="label" style="margin-top:24px;">데이터 관리</div>
+    <div class="card">
+      <div class="row">
+        <button class="btn small ghost" id="btn-backup">📤 백업(내보내기)</button>
+        <button class="btn small ghost" id="btn-restore">📥 복원(가져오기)</button>
+      </div>
+      <input type="file" id="restore-file" accept=".json,application/json" style="display:none;">
+      <div class="row" style="margin-top:8px;">
+        <button class="btn small gray" id="btn-change-region">지역 변경</button>
+        <button class="btn small gray" id="btn-reset" style="color:var(--red); border-color:var(--red);">전체 초기화</button>
+      </div>
+      <div class="nl-hint" style="margin-top:10px;">현재 지역: <span id="mgmt-region"></span> · 데이터는 이 기기에만 저장됩니다</div>
+    </div>
+  </section>
+
+  <!-- 하단 탭바 -->
+  <nav id="tabbar">
+    <button data-screen="screen-home" class="on"><span class="ico">🏠</span>현황</button>
+    <button data-screen="screen-input"><span class="ico">✏️</span>입력</button>
+    <button data-screen="screen-history"><span class="ico">📋</span>내역·관리</button>
+  </nav>
+
+  <!-- 음식점 등록 모달 -->
+  <div class="modal-bg" id="modal-store">
+    <div class="modal">
+      <h2>음식점 등록</h2>
+      <input type="text" id="store-search" placeholder="음식점명 또는 동명으로 검색 (예: 불고기, 중곡동)">
+      <div class="search-result" id="store-search-result"></div>
+      <div class="label">목록에 없나요? 직접 등록</div>
+      <div class="row">
+        <input type="text" id="store-free-name" placeholder="음식점명" style="flex:2;">
+        <input type="text" id="store-free-dong" placeholder="동명 (선택)">
+      </div>
+      <button class="btn" id="btn-store-free-add" style="margin-top:10px;">직접 등록</button>
+      <button class="btn gray" id="btn-store-close" style="margin-top:8px;">닫기</button>
+    </div>
+  </div>
+
+  <!-- 거래 수정 모달 -->
+  <div class="modal-bg" id="modal-tx">
+    <div class="modal">
+      <h2>기록 수정</h2>
+      <div class="label">음식점</div>
+      <select id="tx-edit-store"></select>
+      <div class="label">유형</div>
+      <select id="tx-edit-type"><option value="사용">사용</option><option value="충전">충전</option></select>
+      <div class="label">금액 (원)</div>
+      <input type="number" id="tx-edit-amount" inputmode="numeric">
+      <div class="label">날짜</div>
+      <input type="date" id="tx-edit-date">
+      <div class="label">메모</div>
+      <input type="text" id="tx-edit-memo">
+      <button class="btn" id="btn-tx-save" style="margin-top:16px;">수정 저장</button>
+      <button class="btn danger" id="btn-tx-delete" style="margin-top:8px;">삭제</button>
+      <button class="btn gray" id="btn-tx-close" style="margin-top:8px;">닫기</button>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+</div>
+
+<script>
+'use strict';
+
+/* =====================================================
+   샘플 음식점 데이터 (광진구 20곳)
+   ※ PoC용 내장 데이터 — 향후 공공데이터(지자체 일반음식점
+     인허가 목록) API 연결 시 이 배열만 교체하면 됨
+===================================================== */
+const SAMPLE_STORES = [
+  { name: '강경불고기',       dong: '중곡동' },
+  { name: '만리성',           dong: '능동' },
+  { name: '중곡설렁탕',       dong: '중곡동' },
+  { name: '할매순대국',       dong: '중곡동' },
+  { name: '미소김밥',         dong: '중곡동' },
+  { name: '능동칼국수',       dong: '능동' },
+  { name: '대공원돈까스',     dong: '능동' },
+  { name: '구의족발',         dong: '구의동' },
+  { name: '테크노초밥',       dong: '구의동' },
+  { name: '강변장어구이',     dong: '구의동' },
+  { name: '광장해물탕',       dong: '광장동' },
+  { name: '아차산보리밥',     dong: '광장동' },
+  { name: '워커힐냉면',       dong: '광장동' },
+  { name: '자양곱창',         dong: '자양동' },
+  { name: '뚝섬샤브샤브',     dong: '자양동' },
+  { name: '자양통닭',         dong: '자양동' },
+  { name: '건대육개장',       dong: '화양동' },
+  { name: '화양리백반',       dong: '화양동' },
+  { name: '군자삼계탕',       dong: '군자동' },
+  { name: '세종국밥',         dong: '군자동' },
+];
+
+/* =====================================================
+   데이터 저장 (localStorage: bapjangbu_staff_v1)
+===================================================== */
+const STORAGE_KEY = 'bapjangbu_staff_v1';
+
+let db = { settings: { region: null }, stores: [], transactions: [] };
+
+function loadDB() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        db.settings = parsed.settings || { region: null };
+        db.stores = Array.isArray(parsed.stores) ? parsed.stores : [];
+        db.transactions = Array.isArray(parsed.transactions) ? parsed.transactions : [];
+      }
+    }
+  } catch (e) { /* 손상된 데이터는 무시하고 초기 상태로 시작 */ }
+}
+function saveDB() { localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); }
+
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+function todayStr() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function comma(n) { return Number(n).toLocaleString('ko-KR'); }
+
+/* ===== 잔액 계산 (파생값: 충전 합계 − 사용 합계) ===== */
+function storeBalance(storeId) {
+  let bal = 0;
+  for (const t of db.transactions) {
+    if (t.storeId !== storeId) continue;
+    bal += (t.type === '충전' ? t.amount : -t.amount);
+  }
+  return bal;
+}
+function totalBalance() {
+  return db.stores.reduce((sum, s) => sum + storeBalance(s.id), 0);
+}
+function lastUseDate(storeId) {
+  let last = null;
+  for (const t of db.transactions) {
+    if (t.storeId === storeId && t.type === '사용' && (!last || t.date > last)) last = t.date;
+  }
+  return last;
+}
+function getStore(id) { return db.stores.find(s => s.id === id); }
+function findStoreByName(name) { return db.stores.find(s => s.name === name); }
+
+function addStore(name, dong, source) {
+  const s = { id: uid(), name, dong: dong || '', source, createdAt: todayStr() };
+  db.stores.push(s);
+  saveDB();
+  return s;
+}
+
+/* =====================================================
+   자연어 파싱 (규칙 기반 · 기기 내 처리)
+   예) "강경불고기에 오늘 12000원 사용했어"
+       "만리성에 27000원 충전"
+===================================================== */
+function parseNL(text) {
+  let rest = text.trim();
+  if (!rest) return null;
+  const result = { store: null, sampleStore: null, freeName: null, type: null, amount: null, date: todayStr() };
+
+  // --- 1) 날짜 추출 후 문장에서 제거 (금액 숫자와 혼동 방지) ---
+  const d = new Date();
+  const rel = rest.match(/그저께|그제|어제|오늘/);
+  if (rel) {
+    const diff = { '오늘': 0, '어제': 1, '그제': 2, '그저께': 2 }[rel[0]];
+    d.setDate(d.getDate() - diff);
+    result.date = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    rest = rest.replace(rel[0], ' ');
+  } else {
+    const md = rest.match(/(\d{1,2})\s*월\s*(\d{1,2})\s*일/);
+    if (md) {
+      const y = d.getFullYear();
+      const m = parseInt(md[1], 10), day = parseInt(md[2], 10);
+      // 미래 날짜가 되면 작년으로 해석
+      const cand = new Date(y, m - 1, day);
+      const year = cand > d ? y - 1 : y;
+      result.date = year + '-' + String(m).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+      rest = rest.replace(md[0], ' ');
+    }
+  }
+
+  // --- 2) 금액 추출 ---
+  // "1만2천원" / "2만원" / "만원" 형태
+  let am = rest.match(/(\d+)\s*만\s*(\d+)\s*천\s*원?/);
+  if (am) {
+    result.amount = parseInt(am[1], 10) * 10000 + parseInt(am[2], 10) * 1000;
+    rest = rest.replace(am[0], ' ');
+  } else if ((am = rest.match(/(\d+)\s*만\s*원?/))) {
+    result.amount = parseInt(am[1], 10) * 10000;
+    rest = rest.replace(am[0], ' ');
+  } else if (/만\s*원/.test(rest)) {
+    result.amount = 10000;
+    rest = rest.replace(/만\s*원/, ' ');
+  } else if ((am = rest.match(/(\d{1,3}(?:,\d{3})+|\d+)\s*원/))) {
+    // "12,000원" / "12000원"
+    result.amount = parseInt(am[1].replace(/,/g, ''), 10);
+    rest = rest.replace(am[0], ' ');
+  } else if ((am = rest.match(/(\d{3,})/))) {
+    // 원 없이 숫자만 (3자리 이상)
+    result.amount = parseInt(am[1], 10);
+    rest = rest.replace(am[0], ' ');
+  }
+
+  // --- 3) 유형 추출 (기본: 사용) ---
+  if (/충전|입금|넣었|채웠/.test(rest)) result.type = '충전';
+  else if (/사용|썼|씀|먹었|결제|계산|시켰/.test(rest)) result.type = '사용';
+  else result.type = '사용';
+
+  // --- 4) 음식점 매칭 ---
+  // 4-1. 등록된 음식점명 포함 매칭 (긴 이름 우선)
+  const sorted = [...db.stores].sort((a, b) => b.name.length - a.name.length);
+  for (const s of sorted) {
+    if (rest.includes(s.name)) { result.store = s; break; }
+  }
+  // 4-2. 샘플 목록 매칭 (확인 시 자동 등록)
+  if (!result.store) {
+    const sampleSorted = [...SAMPLE_STORES].sort((a, b) => b.name.length - a.name.length);
+    for (const s of sampleSorted) {
+      if (rest.includes(s.name)) { result.sampleStore = s; break; }
+    }
+  }
+  // 4-3. "~에/에서" 앞 어절을 신규 음식점 후보로
+  if (!result.store && !result.sampleStore) {
+    const m = rest.match(/([가-힣A-Za-z0-9]{2,})\s*(?:에서|에)\s/);
+    if (m) result.freeName = m[1];
+  }
+
+  if (!result.amount && !result.store && !result.sampleStore && !result.freeName) return null;
+  return result;
+}
+
+/* =====================================================
+   화면 전환
+===================================================== */
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  document.querySelectorAll('#tabbar button').forEach(b => b.classList.toggle('on', b.dataset.screen === id));
+  document.getElementById('tabbar').classList.toggle('show', id !== 'screen-setup');
+  if (id === 'screen-home') renderHome();
+  if (id === 'screen-input') renderInput();
+  if (id === 'screen-history') renderHistory();
+  window.scrollTo(0, 0);
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.style.display = 'none'; }, 2200);
+}
+
+/* =====================================================
+   ⓪ 최초 설정
+===================================================== */
+document.getElementById('setup-region').addEventListener('change', e => {
+  document.getElementById('setup-free-wrap').style.display = e.target.value === '__free__' ? 'block' : 'none';
+});
+document.getElementById('btn-setup-done').addEventListener('click', () => {
+  const sel = document.getElementById('setup-region').value;
+  let region = sel === '__free__' ? document.getElementById('setup-free').value.trim() : sel.replace(/^서울 /, '');
+  if (!region) { toast('이용 지역을 입력해 주세요'); return; }
+  db.settings.region = region;
+  saveDB();
+  showScreen('screen-home');
+  toast(region + ' 설정 완료! 음식점을 등록해 보세요');
+});
+
+/* =====================================================
+   ① 홈(현황)
+===================================================== */
+function renderHome() {
+  document.getElementById('home-total').textContent = comma(totalBalance()) + '원';
+  document.getElementById('home-region').textContent = '📍 ' + (db.settings.region || '');
+
+  const wrap = document.getElementById('home-stores');
+  if (db.stores.length === 0) {
+    wrap.innerHTML = '<div class="empty">아직 등록한 음식점이 없어요.<br>아래 버튼으로 첫 음식점을 등록해 보세요!</div>';
+    return;
+  }
+  wrap.innerHTML = '';
+  for (const s of db.stores) {
+    const bal = storeBalance(s.id);
+    const last = lastUseDate(s.id);
+    const div = document.createElement('div');
+    div.className = 'card store-card';
+    div.innerHTML =
+      '<div><div class="s-name"></div><div class="s-meta"></div></div>' +
+      '<div><div class="s-bal-label">잔액</div><div class="s-bal' + (bal < 0 ? ' minus' : '') + '">' + comma(bal) + '원</div></div>';
+    div.querySelector('.s-name').textContent = s.name;
+    div.querySelector('.s-meta').textContent = (s.dong ? s.dong + ' · ' : '') + (last ? '최근 사용 ' + last : '사용 기록 없음');
+    div.addEventListener('click', () => {
+      // 카드 터치 → 해당 음식점 사용액 입력으로 바로 이동 (1터치)
+      inputState.storeId = s.id;
+      inputState.type = '사용';
+      inputState.amount = '';
+      showScreen('screen-input');
+    });
+    wrap.appendChild(div);
+  }
+}
+
+/* ===== 자연어 입력 ===== */
+let nlPending = null; // 확인 대기 중인 파싱 결과
+
+document.getElementById('btn-nl-parse').addEventListener('click', () => {
+  const text = document.getElementById('nl-input').value;
+  const r = parseNL(text);
+  if (!r) { toast('문장을 이해하지 못했어요. 예) 만리성에 27000원 충전'); return; }
+  nlPending = r;
+  renderNLConfirm();
+});
+document.getElementById('nl-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); document.getElementById('btn-nl-parse').click(); }
+});
+
+function renderNLConfirm() {
+  const wrap = document.getElementById('nl-confirm');
+  if (!nlPending) { wrap.innerHTML = ''; return; }
+  const r = nlPending;
+  const storeName = r.store ? r.store.name : (r.sampleStore ? r.sampleStore.name : (r.freeName || '(인식 실패)'));
+  const storeDong = r.store ? r.store.dong : (r.sampleStore ? r.sampleStore.dong : '');
+  let note = '';
+  if (!r.store && r.sampleStore) note = '<div class="c-note">📌 저장하면 「' + r.sampleStore.name + '」이(가) 새 음식점으로 등록돼요</div>';
+  if (!r.store && !r.sampleStore && r.freeName) note = '<div class="c-note">📌 저장하면 「' + r.freeName + '」이(가) 자유 입력으로 등록돼요</div>';
+  let warn = '';
+  if (!r.amount) warn = '<div class="c-warn">⚠️ 금액을 인식하지 못했어요. 문장을 고쳐 다시 인식해 주세요</div>';
+  if (!storeName || storeName === '(인식 실패)') warn += '<div class="c-warn">⚠️ 음식점을 인식하지 못했어요</div>';
+
+  wrap.innerHTML =
+    '<div class="card confirm-card">' +
+      '<div class="c-title">✅ 이렇게 기록할까요?</div>' +
+      '<table>' +
+        '<tr><td>음식점</td><td><b></b><span class="sr-dong" style="color:var(--gray-text);font-size:13px;"></span></td></tr>' +
+        '<tr><td>유형</td><td>' + (r.type === '충전' ? '💰 충전' : '🍽️ 사용') + '</td></tr>' +
+        '<tr><td>금액</td><td><b>' + (r.amount ? comma(r.amount) + '원' : '-') + '</b></td></tr>' +
+        '<tr><td>날짜</td><td>' + r.date + '</td></tr>' +
+      '</table>' + note + warn +
+      '<div class="row" style="margin-top:12px;">' +
+        '<button class="btn small" id="btn-nl-save"' + (r.amount && storeName !== '(인식 실패)' ? '' : ' disabled style="opacity:.4;"') + '>저장</button>' +
+        '<button class="btn small gray" id="btn-nl-cancel">취소</button>' +
+      '</div>' +
+    '</div>';
+  wrap.querySelector('b').textContent = storeName;
+  if (storeDong) wrap.querySelector('.sr-dong').textContent = ' ' + storeDong;
+
+  document.getElementById('btn-nl-save').addEventListener('click', () => {
+    if (!r.amount) return;
+    let store = r.store;
+    if (!store && r.sampleStore) store = addStore(r.sampleStore.name, r.sampleStore.dong, '검색');
+    if (!store && r.freeName) store = addStore(r.freeName, '', '자유입력');
+    if (!store) return;
+    db.transactions.push({
+      id: uid(), storeId: store.id, type: r.type, amount: r.amount,
+      date: r.date, memo: '', inputMethod: '자연어'
+    });
+    saveDB();
+    nlPending = null;
+    document.getElementById('nl-input').value = '';
+    renderNLConfirm();
+    renderHome();
+    toast('✅ ' + store.name + ' ' + comma(r.amount) + '원 ' + r.type + ' 기록 완료');
+  });
+  document.getElementById('btn-nl-cancel').addEventListener('click', () => {
+    nlPending = null;
+    renderNLConfirm();
+  });
+}
+
+document.getElementById('btn-home-add-store').addEventListener('click', openStoreModal);
+
+/* =====================================================
+   ② 입력
+===================================================== */
+const inputState = { type: '사용', storeId: null, amount: '' };
+
+const QUICK_USE = [6000, 7000, 8000, 9000, 10000, 12000];          // 자주 쓰는 사용 금액
+const QUICK_CHARGE = [9000, 18000, 27000, 36000, 45000, 54000];    // 9,000원 배수
+
+function renderInput() {
+  // 유형 토글
+  document.getElementById('tg-use').className = inputState.type === '사용' ? 'on use' : '';
+  document.getElementById('tg-charge').className = inputState.type === '충전' ? 'on charge' : '';
+
+  // 음식점 셀렉트
+  const sel = document.getElementById('input-store');
+  sel.innerHTML = '';
+  if (db.stores.length === 0) {
+    sel.innerHTML = '<option value="">먼저 음식점을 등록해 주세요</option>';
+  } else {
+    for (const s of db.stores) {
+      const o = document.createElement('option');
+      o.value = s.id;
+      o.textContent = s.name + (s.dong ? ' (' + s.dong + ')' : '') + ' — 잔액 ' + comma(storeBalance(s.id)) + '원';
+      sel.appendChild(o);
+    }
+    if (inputState.storeId && getStore(inputState.storeId)) sel.value = inputState.storeId;
+    inputState.storeId = sel.value;
+  }
+
+  // 원터치 금액 버튼
+  const grid = document.getElementById('quick-grid');
+  grid.innerHTML = '';
+  const amounts = inputState.type === '충전' ? QUICK_CHARGE : QUICK_USE;
+  for (const a of amounts) {
+    const b = document.createElement('button');
+    b.textContent = comma(a) + '원';
+    b.addEventListener('click', () => {
+      inputState.amount = String(a);
+      renderAmount();
+    });
+    grid.appendChild(b);
+  }
+
+  if (!document.getElementById('input-date').value) document.getElementById('input-date').value = todayStr();
+  renderAmount();
+}
+
+function renderAmount() {
+  const n = inputState.amount ? parseInt(inputState.amount, 10) : 0;
+  document.getElementById('amount-display').innerHTML = comma(n) + '<span class="won">원</span>';
+}
+
+document.getElementById('tg-use').addEventListener('click', () => { inputState.type = '사용'; renderInput(); });
+document.getElementById('tg-charge').addEventListener('click', () => { inputState.type = '충전'; renderInput(); });
+document.getElementById('input-store').addEventListener('change', e => { inputState.storeId = e.target.value; });
+
+document.querySelectorAll('.keypad button').forEach(b => {
+  b.addEventListener('click', () => {
+    const k = b.dataset.k;
+    if (k === 'back') inputState.amount = inputState.amount.slice(0, -1);
+    else if (inputState.amount.length < 8) inputState.amount += k;
+    inputState.amount = inputState.amount.replace(/^0+(?=\d)/, ''); // 선행 0 제거
+    renderAmount();
+  });
+});
+
+document.getElementById('btn-save-tx').addEventListener('click', () => {
+  const storeId = document.getElementById('input-store').value;
+  const amount = inputState.amount ? parseInt(inputState.amount, 10) : 0;
+  if (!storeId) { toast('먼저 음식점을 등록해 주세요'); openStoreModal(); return; }
+  if (!amount) { toast('금액을 입력해 주세요'); return; }
+  const date = document.getElementById('input-date').value || todayStr();
+  const memo = document.getElementById('input-memo').value.trim();
+  db.transactions.push({
+    id: uid(), storeId, type: inputState.type, amount, date, memo, inputMethod: '버튼'
+  });
+  saveDB();
+  const s = getStore(storeId);
+  inputState.amount = '';
+  document.getElementById('input-memo').value = '';
+  toast('✅ ' + s.name + ' ' + comma(amount) + '원 ' + inputState.type + ' 완료 (잔액 ' + comma(storeBalance(storeId)) + '원)');
+  showScreen('screen-home');
+});
+
+/* =====================================================
+   ③ 내역·관리
+===================================================== */
+function renderHistory() {
+  // 필터 셀렉트
+  const filter = document.getElementById('history-filter');
+  const cur = filter.value;
+  filter.innerHTML = '<option value="">전체 음식점</option>';
+  for (const s of db.stores) {
+    const o = document.createElement('option');
+    o.value = s.id; o.textContent = s.name;
+    filter.appendChild(o);
+  }
+  if (cur && getStore(cur)) filter.value = cur;
+
+  // 거래 목록 (날짜 내림차순 그룹)
+  const list = document.getElementById('history-list');
+  const txs = db.transactions
+    .filter(t => !filter.value || t.storeId === filter.value)
+    .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+
+  if (txs.length === 0) {
+    list.innerHTML = '<div class="empty">기록이 없어요</div>';
+  } else {
+    list.innerHTML = '';
+    let lastDate = null;
+    for (const t of txs) {
+      if (t.date !== lastDate) {
+        const h = document.createElement('div');
+        h.className = 'tx-date';
+        h.textContent = t.date;
+        list.appendChild(h);
+        lastDate = t.date;
+      }
+      const s = getStore(t.storeId);
+      const div = document.createElement('div');
+      div.className = 'card tx-item';
+      div.innerHTML =
+        '<div><div class="x-store"></div>' + (t.memo ? '<div class="x-memo"></div>' : '') + '</div>' +
+        '<div><div class="x-amount ' + (t.type === '충전' ? 'charge' : 'use') + '">' +
+          (t.type === '충전' ? '+' : '−') + comma(t.amount) + '원</div>' +
+        '<div class="x-method">' + t.type + ' · ' + t.inputMethod + '</div></div>';
+      div.querySelector('.x-store').textContent = s ? s.name : '(삭제된 음식점)';
+      if (t.memo) div.querySelector('.x-memo').textContent = t.memo;
+      div.addEventListener('click', () => openTxModal(t.id));
+      list.appendChild(div);
+    }
+  }
+
+  // 음식점 관리 목록
+  const mgmt = document.getElementById('mgmt-stores');
+  if (db.stores.length === 0) {
+    mgmt.innerHTML = '<div class="empty" style="padding:12px 0;">등록된 음식점이 없어요</div>';
+  } else {
+    mgmt.innerHTML = '';
+    for (const s of db.stores) {
+      const row = document.createElement('div');
+      row.className = 'm-row';
+      row.innerHTML =
+        '<div><b></b> <span class="sr-dong" style="color:var(--gray-text);font-size:13px;"></span>' +
+        '<div style="font-size:12px;color:var(--gray-text);">' + s.source + ' 등록 · 잔액 ' + comma(storeBalance(s.id)) + '원</div></div>' +
+        '<button class="btn small gray del">삭제</button>';
+      row.querySelector('b').textContent = s.name;
+      row.querySelector('.sr-dong').textContent = s.dong || '';
+      row.querySelector('.del').addEventListener('click', () => {
+        const cnt = db.transactions.filter(t => t.storeId === s.id).length;
+        if (!confirm('「' + s.name + '」을(를) 삭제할까요?' + (cnt ? '\n관련 기록 ' + cnt + '건도 함께 삭제됩니다.' : ''))) return;
+        db.stores = db.stores.filter(x => x.id !== s.id);
+        db.transactions = db.transactions.filter(t => t.storeId !== s.id);
+        saveDB();
+        renderHistory();
+        toast('삭제했어요');
+      });
+      mgmt.appendChild(row);
+    }
+  }
+
+  document.getElementById('mgmt-region').textContent = db.settings.region || '';
+}
+document.getElementById('history-filter').addEventListener('change', renderHistory);
+document.getElementById('btn-hist-add-store').addEventListener('click', openStoreModal);
+
+/* ===== 거래 수정 모달 ===== */
+let txEditId = null;
+function openTxModal(txId) {
+  const t = db.transactions.find(x => x.id === txId);
+  if (!t) return;
+  txEditId = txId;
+  const sel = document.getElementById('tx-edit-store');
+  sel.innerHTML = '';
+  for (const s of db.stores) {
+    const o = document.createElement('option');
+    o.value = s.id; o.textContent = s.name + (s.dong ? ' (' + s.dong + ')' : '');
+    sel.appendChild(o);
+  }
+  sel.value = t.storeId;
+  document.getElementById('tx-edit-type').value = t.type;
+  document.getElementById('tx-edit-amount').value = t.amount;
+  document.getElementById('tx-edit-date').value = t.date;
+  document.getElementById('tx-edit-memo').value = t.memo || '';
+  document.getElementById('modal-tx').classList.add('show');
+}
+document.getElementById('btn-tx-save').addEventListener('click', () => {
+  const t = db.transactions.find(x => x.id === txEditId);
+  if (!t) return;
+  const amount = parseInt(document.getElementById('tx-edit-amount').value, 10);
+  if (!amount || amount <= 0) { toast('금액을 확인해 주세요'); return; }
+  t.storeId = document.getElementById('tx-edit-store').value;
+  t.type = document.getElementById('tx-edit-type').value;
+  t.amount = amount;
+  t.date = document.getElementById('tx-edit-date').value || todayStr();
+  t.memo = document.getElementById('tx-edit-memo').value.trim();
+  saveDB();
+  document.getElementById('modal-tx').classList.remove('show');
+  renderHistory();
+  toast('수정했어요');
+});
+document.getElementById('btn-tx-delete').addEventListener('click', () => {
+  if (!confirm('이 기록을 삭제할까요?')) return;
+  db.transactions = db.transactions.filter(x => x.id !== txEditId);
+  saveDB();
+  document.getElementById('modal-tx').classList.remove('show');
+  renderHistory();
+  toast('삭제했어요');
+});
+document.getElementById('btn-tx-close').addEventListener('click', () => {
+  document.getElementById('modal-tx').classList.remove('show');
+});
+
+/* =====================================================
+   음식점 등록 모달 (검색 + 자유입력)
+===================================================== */
+function openStoreModal() {
+  document.getElementById('store-search').value = '';
+  document.getElementById('store-free-name').value = '';
+  document.getElementById('store-free-dong').value = '';
+  renderStoreSearch('');
+  document.getElementById('modal-store').classList.add('show');
+}
+function renderStoreSearch(q) {
+  const wrap = document.getElementById('store-search-result');
+  q = q.trim();
+  const list = SAMPLE_STORES.filter(s => !q || s.name.includes(q) || s.dong.includes(q));
+  if (list.length === 0) {
+    wrap.innerHTML = '<div class="empty" style="padding:16px 0;">검색 결과가 없어요.<br>아래에서 직접 등록해 주세요.</div>';
+    return;
+  }
+  wrap.innerHTML = '';
+  for (const s of list) {
+    const done = !!findStoreByName(s.name);
+    const div = document.createElement('div');
+    div.className = 'sr-item' + (done ? ' registered' : '');
+    div.innerHTML = '<b></b><span class="sr-dong"></span>' + (done ? ' <span style="font-size:12px;">✔ 등록됨</span>' : '');
+    div.querySelector('b').textContent = s.name;
+    div.querySelector('.sr-dong').textContent = s.dong;
+    if (!done) {
+      div.addEventListener('click', () => {
+        addStore(s.name, s.dong, '검색');
+        document.getElementById('modal-store').classList.remove('show');
+        refreshCurrent();
+        toast('「' + s.name + '」 등록 완료');
+      });
+    }
+    wrap.appendChild(div);
+  }
+}
+document.getElementById('store-search').addEventListener('input', e => renderStoreSearch(e.target.value));
+document.getElementById('btn-store-free-add').addEventListener('click', () => {
+  const name = document.getElementById('store-free-name').value.trim();
+  const dong = document.getElementById('store-free-dong').value.trim();
+  if (!name) { toast('음식점명을 입력해 주세요'); return; }
+  if (findStoreByName(name)) { toast('이미 등록된 음식점이에요'); return; }
+  addStore(name, dong, '자유입력');
+  document.getElementById('modal-store').classList.remove('show');
+  refreshCurrent();
+  toast('「' + name + '」 등록 완료');
+});
+document.getElementById('btn-store-close').addEventListener('click', () => {
+  document.getElementById('modal-store').classList.remove('show');
+});
+
+function refreshCurrent() {
+  const active = document.querySelector('.screen.active');
+  if (!active) return;
+  if (active.id === 'screen-home') renderHome();
+  if (active.id === 'screen-input') renderInput();
+  if (active.id === 'screen-history') renderHistory();
+}
+
+/* =====================================================
+   백업 · 복원 · 지역변경 · 초기화
+===================================================== */
+document.getElementById('btn-backup').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '밥장부백업_' + todayStr() + '.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('백업 파일을 내려받았어요');
+});
+document.getElementById('btn-restore').addEventListener('click', () => {
+  document.getElementById('restore-file').click();
+});
+document.getElementById('restore-file').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      if (!data || !data.settings || !Array.isArray(data.stores) || !Array.isArray(data.transactions)) {
+        toast('올바른 백업 파일이 아니에요'); return;
+      }
+      if (!confirm('현재 데이터를 백업 파일 내용으로 덮어쓸까요?\n(음식점 ' + data.stores.length + '곳, 기록 ' + data.transactions.length + '건)')) return;
+      db = data;
+      saveDB();
+      renderHistory();
+      toast('복원 완료');
+    } catch (err) { toast('파일을 읽지 못했어요'); }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+document.getElementById('btn-change-region').addEventListener('click', () => {
+  const r = prompt('새 이용 지역(시·군·구)을 입력해 주세요', db.settings.region || '');
+  if (r === null) return;
+  if (!r.trim()) { toast('지역을 입력해 주세요'); return; }
+  db.settings.region = r.trim();
+  saveDB();
+  renderHistory();
+  toast('지역을 「' + db.settings.region + '」(으)로 변경했어요');
+});
+document.getElementById('btn-reset').addEventListener('click', () => {
+  if (!confirm('모든 데이터(음식점·기록·설정)를 삭제할까요?\n삭제 후 되돌릴 수 없어요.')) return;
+  if (!confirm('정말 삭제할까요? 백업을 먼저 받는 것을 권장해요.')) return;
+  localStorage.removeItem(STORAGE_KEY);
+  db = { settings: { region: null }, stores: [], transactions: [] };
+  showScreen('screen-setup');
+  toast('초기화했어요');
+});
+
+/* =====================================================
+   탭바 · 시작
+===================================================== */
+document.querySelectorAll('#tabbar button').forEach(b => {
+  b.addEventListener('click', () => showScreen(b.dataset.screen));
+});
+
+loadDB();
+showScreen(db.settings.region ? 'screen-home' : 'screen-setup');
+</script>
+</body>
+</html>
