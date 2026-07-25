@@ -245,8 +245,11 @@
 
     <div class="card nl-box">
       <textarea id="nl-input" placeholder="문장으로 입력해 보세요&#10;예) 강경불고기에 오늘 12000원 사용했어" enterkeyhint="done"></textarea>
-      <div class="nl-hint">💬 음식점명·금액·날짜를 자동으로 알아들어요</div>
-      <button class="btn small" id="btn-nl-parse" style="margin-top:8px;">인식하기</button>
+      <div class="nl-hint">💬 음식점명·금액·날짜를 알아들어요 · 등록된 음식점만 기록돼요</div>
+      <div class="row" style="margin-top:8px;">
+        <button class="btn small" id="btn-nl-voice">🎤 말로 입력</button>
+        <button class="btn small" id="btn-nl-parse">인식하기</button>
+      </div>
     </div>
 
     <div id="nl-confirm"></div>
@@ -532,13 +535,12 @@ function parseNL(text) {
   else if (/사용|썼|씀|먹었|결제|계산|시켰/.test(rest)) result.type = '사용';
   else result.type = '사용';
 
-  // --- 4) 음식점 매칭 ---
+  // --- 4) 음식점 매칭 — 등록된 음식점만 허용 (미등록 가게 기록은 오류) ---
   // "~에/에서" 앞 어절 = 가게 호칭 후보 (금액은 이미 제거된 상태)
   const candM = rest.match(/([가-힣A-Za-z0-9]{2,})\s*(?:에서|에)(?=\s|$)/);
   const cand = candM ? candM[1] : '';
-  // 4-1. 등록된 음식점 매칭 — 공백 무시·부분 일치.
-  // 공공데이터 정식 상호는 길어서("김밥나라 중곡점") 줄여 부르는 경우("김밥나라")가 많다.
-  // 전체 포함이 아니어도 호칭 후보와 상호가 서로 포함 관계면 같은 가게로 본다(긴 일치 우선).
+  // 공백 무시·부분 일치: 공공데이터 정식 상호는 길어서("김밥나라 중곡점")
+  // 줄여 부르는 경우("김밥나라")가 많다. 호칭과 상호가 서로 포함 관계면 같은 가게(긴 일치 우선).
   const restN = normText(rest);
   const candN = normText(cand);
   let best = null, bestLen = 0;
@@ -550,19 +552,9 @@ function parseNL(text) {
     if (hit > bestLen) { best = s; bestLen = hit; }
   }
   if (best) result.store = best;
-  // 4-2. 샘플 목록 매칭 (확인 시 자동 등록)
-  if (!result.store) {
-    const sampleSorted = [...SAMPLE_STORES].sort((a, b) => b.name.length - a.name.length);
-    for (const s of sampleSorted) {
-      if (rest.includes(s.name)) { result.sampleStore = s; break; }
-    }
-  }
-  // 4-3. 호칭 후보를 신규 음식점 이름으로
-  if (!result.store && !result.sampleStore && cand) {
-    result.freeName = cand;
-  }
+  else result.freeName = cand;   // 매칭 실패 시 오류 안내용 호칭 (자동 등록 안 함)
 
-  if (!result.amount && !result.store && !result.sampleStore && !result.freeName) return null;
+  if (!result.amount && !result.store && !result.freeName) return null;
   return result;
 }
 
@@ -706,42 +698,96 @@ document.getElementById('nl-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') { e.preventDefault(); document.getElementById('btn-nl-parse').click(); }
 });
 
+/* ===== 음성 받아쓰기 (Web Speech API, 기기 내 음성→문자만 사용) ===== */
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+let voiceRec = null, voiceOn = false;
+const voiceBtn = document.getElementById('btn-nl-voice');
+function setVoiceUI(on) {
+  voiceOn = on;
+  voiceBtn.textContent = on ? '🔴 듣는 중… 탭하여 완료' : '🎤 말로 입력';
+}
+voiceBtn.addEventListener('click', () => {
+  if (!SpeechRec) { toast('이 브라우저는 음성 입력을 지원하지 않아요. 키보드의 마이크 키를 이용해 주세요'); return; }
+  if (voiceOn) { try { voiceRec.stop(); } catch (_) { setVoiceUI(false); } return; }
+  const input = document.getElementById('nl-input');
+  voiceRec = new SpeechRec();
+  voiceRec.lang = 'ko-KR';
+  voiceRec.interimResults = true;   // 말하는 중간에도 받아쓰기 표시
+  voiceRec.continuous = false;      // 말이 끝나면 자동 종료
+  let finalText = '';
+  voiceRec.onresult = (e) => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) finalText += t;
+      else interim += t;
+    }
+    input.value = (finalText + interim).trim();
+  };
+  voiceRec.onerror = (e) => {
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') toast('마이크 권한을 허용해 주세요');
+    else if (e.error === 'no-speech') toast('음성이 들리지 않았어요. 다시 말해 주세요');
+    else if (e.error !== 'aborted') toast('음성 인식 오류: ' + e.error);
+  };
+  voiceRec.onend = () => {
+    setVoiceUI(false);
+    // 받아쓰기가 끝나면 자동으로 인식하기 실행 (저장은 확인 카드에서 사용자가 결정)
+    if (input.value.trim()) document.getElementById('btn-nl-parse').click();
+  };
+  setVoiceUI(true);
+  input.value = '';
+  try { voiceRec.start(); } catch (_) { setVoiceUI(false); toast('음성 인식을 시작할 수 없어요'); }
+});
+
 function renderNLConfirm() {
   const wrap = document.getElementById('nl-confirm');
   if (!nlPending) { wrap.innerHTML = ''; return; }
   const r = nlPending;
-  const storeName = r.store ? r.store.name : (r.sampleStore ? r.sampleStore.name : (r.freeName || '(인식 실패)'));
-  const storeDong = r.store ? r.store.dong : (r.sampleStore ? r.sampleStore.dong : '');
-  let note = '';
-  if (!r.store && r.sampleStore) note = '<div class="c-note">📌 저장하면 「' + r.sampleStore.name + '」이(가) 새 음식점으로 등록돼요</div>';
-  if (!r.store && !r.sampleStore && r.freeName) note = '<div class="c-note">📌 저장하면 「' + r.freeName + '」이(가) 자유 입력으로 등록돼요</div>';
+  const bal = r.store ? storeBalance(r.store.id) : 0;
+  const overUse = !!(r.store && r.type === '사용' && r.amount && r.amount > bal);   // 충전 잔액 초과 사용 금지
+  const storeName = r.store ? r.store.name : (r.freeName || '(인식 실패)');
+  const canSave = !!(r.store && r.amount && !overUse);
+
   let warn = '';
-  if (!r.amount) warn = '<div class="c-warn">⚠️ 금액을 인식하지 못했어요. 문장을 고쳐 다시 인식해 주세요</div>';
-  if (!storeName || storeName === '(인식 실패)') warn += '<div class="c-warn">⚠️ 음식점을 인식하지 못했어요</div>';
+  if (!r.store) {
+    // 등록된 음식점만 기록 가능 — 미등록 가게는 오류로 안내
+    warn += r.freeName
+      ? '<div class="c-warn">⚠️ 「<span class="w-name"></span>」은(는) 등록된 음식점에 없어요. 먼저 음식점을 등록해 주세요.</div>'
+      : '<div class="c-warn">⚠️ 음식점을 인식하지 못했어요. 등록된 음식점 이름으로 말해 주세요.</div>';
+  }
+  if (!r.amount) warn += '<div class="c-warn">⚠️ 금액을 인식하지 못했어요. 문장을 고쳐 다시 인식해 주세요</div>';
+  if (overUse) warn += '<div class="c-warn">⚠️ 충전 잔액(' + comma(bal) + '원)보다 많이 사용할 수 없어요</div>';
 
   wrap.innerHTML =
     '<div class="card confirm-card">' +
-      '<div class="c-title">✅ 이렇게 기록할까요?</div>' +
+      '<div class="c-title">' + (canSave ? '✅ 이렇게 기록할까요?' : '⚠️ 확인이 필요해요') + '</div>' +
       '<table>' +
         '<tr><td>음식점</td><td><b></b><span class="sr-dong" style="color:var(--gray-text);font-size:13px;"></span></td></tr>' +
         '<tr><td>유형</td><td>' + (r.type === '충전' ? '💰 충전' : '🍽️ 사용') + '</td></tr>' +
         '<tr><td>금액</td><td><b>' + (r.amount ? comma(r.amount) + '원' : '-') + '</b></td></tr>' +
+        (r.store ? '<tr><td>잔액</td><td>' + comma(bal) + '원</td></tr>' : '') +
         '<tr><td>날짜</td><td>' + r.date + '</td></tr>' +
-      '</table>' + note + warn +
+      '</table>' + warn +
       '<div class="row" style="margin-top:12px;">' +
-        '<button class="btn small" id="btn-nl-save"' + (r.amount && storeName !== '(인식 실패)' ? '' : ' disabled style="opacity:.4;"') + '>저장</button>' +
+        '<button class="btn small" id="btn-nl-save"' + (canSave ? '' : ' disabled style="opacity:.4;"') + '>저장</button>' +
+        (!r.store && r.freeName ? '<button class="btn small" id="btn-nl-register">음식점 등록</button>' : '') +
         '<button class="btn small gray" id="btn-nl-cancel">취소</button>' +
       '</div>' +
     '</div>';
   wrap.querySelector('b').textContent = storeName;
-  if (storeDong) wrap.querySelector('.sr-dong').textContent = ' ' + storeDong;
+  if (r.store && r.store.dong) wrap.querySelector('.sr-dong').textContent = ' ' + r.store.dong;
+  const wName = wrap.querySelector('.w-name');
+  if (wName) wName.textContent = r.freeName;
 
   document.getElementById('btn-nl-save').addEventListener('click', () => {
-    if (!r.amount) return;
-    let store = r.store;
-    if (!store && r.sampleStore) store = addStore(r.sampleStore.name, r.sampleStore.dong, '검색');
-    if (!store && r.freeName) store = addStore(r.freeName, '', '자유입력');
-    if (!store) return;
+    if (!r.store || !r.amount) return;
+    // 저장 시점 재검증 (확인 카드 표시 후 잔액이 바뀌었을 수 있음)
+    if (r.type === '사용' && r.amount > storeBalance(r.store.id)) {
+      toast('충전 잔액(' + comma(storeBalance(r.store.id)) + '원)보다 많이 사용할 수 없어요');
+      renderNLConfirm();
+      return;
+    }
+    const store = r.store;
     db.transactions.push({
       id: uid(), storeId: store.id, type: r.type, amount: r.amount,
       date: r.date, memo: '', inputMethod: '자연어'
@@ -753,6 +799,17 @@ function renderNLConfirm() {
     expandedStores.add(store.id);   // 기록된 음식점 카드를 펼쳐서 바로 보여줌
     renderHome();
     toast('✅ ' + store.name + ' ' + comma(r.amount) + '원 ' + r.type + ' 기록 완료');
+  });
+  const regBtn = document.getElementById('btn-nl-register');
+  if (regBtn) regBtn.addEventListener('click', () => {
+    // 등록 모달을 열고 인식된 가게 이름으로 바로 검색해 줌
+    openStoreModal();
+    const q = r.freeName || '';
+    if (q) {
+      document.getElementById('store-search').value = q;
+      renderStoreSearch(q);
+      triggerLiveSearch(q);
+    }
   });
   document.getElementById('btn-nl-cancel').addEventListener('click', () => {
     nlPending = null;
@@ -833,6 +890,11 @@ document.getElementById('btn-save-tx').addEventListener('click', () => {
   const amount = inputState.amount ? parseInt(inputState.amount, 10) : 0;
   if (!storeId) { toast('먼저 음식점을 등록해 주세요'); openStoreModal(); return; }
   if (!amount) { toast('금액을 입력해 주세요'); return; }
+  // 충전 합계 ≥ 사용 합계 불변식: 잔액보다 큰 사용액은 입력 불가
+  if (inputState.type === '사용' && amount > storeBalance(storeId)) {
+    toast('충전 잔액(' + comma(storeBalance(storeId)) + '원)보다 많이 사용할 수 없어요');
+    return;
+  }
   const date = document.getElementById('input-date').value || todayStr();
   const memo = document.getElementById('input-memo').value.trim();
   db.transactions.push({
