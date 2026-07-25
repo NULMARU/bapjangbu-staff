@@ -139,7 +139,14 @@
   .confirm-card .c-note { font-size: 13px; color: var(--gray-text); margin-top: 8px; }
 
   /* ===== ② 입력 ===== */
-  .toggle { display: flex; background: #e9ebed; border-radius: 12px; padding: 4px; margin-bottom: 14px; }
+  .input-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  #btn-input-back {
+    width: 38px; height: 38px; border: none; border-radius: 12px; background: #fff;
+    font-size: 24px; line-height: 1; color: var(--green); font-weight: 700; cursor: pointer;
+    box-shadow: 0 2px 10px rgba(14,90,64,.07);
+  }
+  #btn-input-back:active { background: var(--green-light); }
+  .toggle { display: flex; background: #e4ede9; border-radius: 12px; padding: 4px; margin-bottom: 14px; }
   .toggle button {
     flex: 1; padding: 12px; border: none; border-radius: 9px; background: none;
     font-size: 16px; font-weight: 700; color: var(--gray-text); cursor: pointer;
@@ -269,9 +276,12 @@
     <button class="btn ghost" id="btn-home-add-store">+ 음식점 등록</button>
   </section>
 
-  <!-- ② 입력 -->
+  <!-- ② 입력 (현황의 음식점 카드 → 사용/충전 버튼으로 진입) -->
   <section class="screen" id="screen-input">
-    <h1>기록하기</h1>
+    <div class="input-head">
+      <button id="btn-input-back" aria-label="현황으로 돌아가기">‹</button>
+      <h1>기록하기</h1>
+    </div>
     <p class="sub">음식점을 고르고 금액을 누르면 끝!</p>
 
     <div class="toggle">
@@ -307,14 +317,19 @@
     <button class="btn" id="btn-save-tx" style="margin-top:16px;">저장</button>
   </section>
 
-  <!-- ③ 내역·관리 -->
+  <!-- ③ 사용이력 -->
   <section class="screen" id="screen-history">
-    <h1>내역·관리</h1>
+    <h1>사용이력</h1>
+    <p class="sub">기록을 누르면 수정·삭제할 수 있어요</p>
     <div class="label">음식점 필터</div>
     <select id="history-filter"><option value="">전체</option></select>
     <div id="history-list"></div>
+  </section>
 
-    <div class="label" style="margin-top:24px;">음식점 관리</div>
+  <!-- ④ 관리 -->
+  <section class="screen" id="screen-manage">
+    <h1>관리</h1>
+    <div class="label">음식점 관리</div>
     <div class="card mgmt-list" id="mgmt-stores"></div>
     <button class="btn ghost" id="btn-hist-add-store">+ 음식점 등록</button>
 
@@ -333,11 +348,11 @@
     </div>
   </section>
 
-  <!-- 하단 탭바 -->
+  <!-- 하단 탭바 (입력 화면은 현황의 음식점 카드에서 진입) -->
   <nav id="tabbar">
     <button data-screen="screen-home" class="on"><span class="ico">🏠</span>현황</button>
-    <button data-screen="screen-input"><span class="ico">✏️</span>입력</button>
-    <button data-screen="screen-history"><span class="ico">📋</span>내역·관리</button>
+    <button data-screen="screen-history"><span class="ico">📋</span>사용이력</button>
+    <button data-screen="screen-manage"><span class="ico">⚙️</span>관리</button>
   </nav>
 
   <!-- 음식점 등록 모달 -->
@@ -615,6 +630,7 @@ function showScreen(id) {
   if (id === 'screen-home') renderHome();
   if (id === 'screen-input') renderInput();
   if (id === 'screen-history') renderHistory();
+  if (id === 'screen-manage') renderManage();
   window.scrollTo(0, 0);
 }
 
@@ -956,8 +972,10 @@ document.getElementById('btn-save-tx').addEventListener('click', () => {
   showScreen('screen-home');
 });
 
+document.getElementById('btn-input-back').addEventListener('click', () => showScreen('screen-home'));
+
 /* =====================================================
-   ③ 내역·관리
+   ③ 사용이력
 ===================================================== */
 function renderHistory() {
   // 필터 셀렉트
@@ -1004,8 +1022,13 @@ function renderHistory() {
       list.appendChild(div);
     }
   }
+}
+document.getElementById('history-filter').addEventListener('change', renderHistory);
 
-  // 음식점 관리 목록
+/* =====================================================
+   ④ 관리 (음식점·데이터)
+===================================================== */
+function renderManage() {
   const mgmt = document.getElementById('mgmt-stores');
   if (db.stores.length === 0) {
     mgmt.innerHTML = '<div class="empty" style="padding:12px 0;">등록된 음식점이 없어요</div>';
@@ -1026,7 +1049,7 @@ function renderHistory() {
         db.stores = db.stores.filter(x => x.id !== s.id);
         db.transactions = db.transactions.filter(t => t.storeId !== s.id);
         saveDB();
-        renderHistory();
+        renderManage();
         toast('삭제했어요');
       });
       mgmt.appendChild(row);
@@ -1035,7 +1058,6 @@ function renderHistory() {
 
   document.getElementById('mgmt-region').textContent = db.settings.region || '';
 }
-document.getElementById('history-filter').addEventListener('change', renderHistory);
 document.getElementById('btn-hist-add-store').addEventListener('click', openStoreModal);
 
 /* ===== 거래 수정 모달 ===== */
@@ -1324,6 +1346,7 @@ function refreshCurrent() {
   if (active.id === 'screen-home') renderHome();
   if (active.id === 'screen-input') renderInput();
   if (active.id === 'screen-history') renderHistory();
+  if (active.id === 'screen-manage') renderManage();
 }
 
 /* =====================================================
