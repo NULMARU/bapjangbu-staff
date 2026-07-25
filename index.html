@@ -674,7 +674,9 @@ function renderHome() {
     return;
   }
   wrap.innerHTML = '';
-  for (const s of db.stores) {
+  // 잔액 큰 순으로 정렬 (동액이면 등록 순 유지)
+  const sortedStores = [...db.stores].sort((a, b) => storeBalance(b.id) - storeBalance(a.id));
+  for (const s of sortedStores) {
     const bal = storeBalance(s.id);
     const last = lastUseDate(s.id);
     const open = expandedStores.has(s.id);
