@@ -169,6 +169,8 @@
   .search-result .sr-item .sr-dong { color: var(--gray-text); font-size: 13px; margin-left: 6px; }
   .search-result .sr-item.registered { color: var(--gray-text); }
   .sr-hint { font-size: 12px; color: var(--gray-text); margin-top: 6px; }
+  .sr-addr { display: block; font-size: 12px; color: var(--gray-text); margin-top: 2px; font-weight: 400; }
+  .sr-status { font-size: 13px; color: var(--gray-text); padding: 10px 2px; }
   .sr-quick-add {
     width: 100%; margin-top: 10px; padding: 14px; border: 1.5px dashed var(--green);
     border-radius: 12px; background: var(--green-light); color: var(--green);
@@ -308,8 +310,8 @@
   <div class="modal-bg" id="modal-store">
     <div class="modal">
       <h2>음식점 등록</h2>
-      <input type="search" id="store-search" placeholder="음식점명·동명 검색 (예: 불고기, 강경 불고기, ㄱㄱ)" autocomplete="off" enterkeyhint="search">
-      <div class="sr-hint">띄어쓰기·초성(ㄱㄱㅂㄱㄱ)으로도 찾을 수 있어요 · 터치하면 바로 등록</div>
+      <input type="search" id="store-search" placeholder="음식점명·동명 검색 (예: 불고기, 강경 불고기)" autocomplete="off" enterkeyhint="search">
+      <div class="sr-hint" id="store-search-hint">이름을 입력하면 실제 음식점을 찾아드려요 · 터치하면 바로 등록<br>데이터: 행정안전부 인허가 공공데이터(LOCALDATA)</div>
       <div class="search-result" id="store-search-result"></div>
       <div class="label">목록에 없나요? 직접 등록</div>
       <div class="row">
@@ -376,6 +378,23 @@ const SAMPLE_STORES = [
 ];
 
 /* =====================================================
+   공공데이터 실시간 검색 — 밥장부 중계 서버 프록시 경유
+   (행정안전부 일반음식점 인허가, GET /api/restaurants?q=&region=)
+   개인정보는 실리지 않는다(검색어=가게 이름뿐).
+===================================================== */
+const RELAY_BASE = 'https://prepaid-relay.sulsul-plus.workers.dev';
+// LOCALDATA 개방자치단체코드 — 코드가 등재된 지역은 지역 한정 검색,
+// 없으면 이름 검색 후 주소 필터로 동작(본체 앱과 동일 방식)
+const REGION_CODES = { '광진구': '3040000' };
+// 주소 필터용 시도 축약 → 정식 명칭 ("서울 강남구" 설정 시 주소의 "서울특별시"와 대조)
+const SIDO_FULL = {
+  '서울': '서울특별시', '부산': '부산광역시', '대구': '대구광역시', '인천': '인천광역시',
+  '광주': '광주광역시', '대전': '대전광역시', '울산': '울산광역시', '세종': '세종특별자치시',
+  '경기': '경기도', '강원': '강원특별자치도', '충북': '충청북도', '충남': '충청남도',
+  '전북': '전북특별자치도', '전남': '전라남도', '경북': '경상북도', '경남': '경상남도', '제주': '제주특별자치도'
+};
+
+/* =====================================================
    데이터 저장 (localStorage: bapjangbu_staff_v1)
 ===================================================== */
 const STORAGE_KEY = 'bapjangbu_staff_v1';
@@ -426,8 +445,9 @@ function lastUseDate(storeId) {
 function getStore(id) { return db.stores.find(s => s.id === id); }
 function findStoreByName(name) { return db.stores.find(s => s.name === name); }
 
-function addStore(name, dong, source) {
-  const s = { id: uid(), name, dong: dong || '', source, createdAt: todayStr() };
+function addStore(name, dong, source, extra) {
+  // extra.restaurantId: 공공데이터 관리번호(LOCALDATA mgtNo) — 향후 밥장부 본체 연계 대비
+  const s = Object.assign({ id: uid(), name, dong: dong || '', source, createdAt: todayStr() }, extra || {});
   db.stores.push(s);
   saveDB();
   return s;
@@ -875,6 +895,7 @@ function openStoreModal() {
   document.getElementById('store-search').value = '';
   document.getElementById('store-free-name').value = '';
   document.getElementById('store-free-dong').value = '';
+  live.token = ''; live.items = []; live.status = 'idle'; liveSeq++;  // 이전 검색 상태 초기화
   renderStoreSearch('');
   document.getElementById('modal-store').classList.add('show');
   setTimeout(() => document.getElementById('store-search').focus(), 80);
@@ -906,50 +927,149 @@ function storeMatchScore(store, tokens) {
   }
   return score;
 }
+// --- 공공데이터 실시간 조회 ---
+// live 상태: idle(입력 대기) / loading / ok / error(오프라인 등 → 내장 샘플 폴백)
+const live = { token: '', items: [], status: 'idle' };
+const liveCache = new Map();   // 검색 토큰 → 결과 (세션 내 캐시)
+let liveTimer = null, liveSeq = 0;
+
+function regionTokens() {
+  return (db.settings.region || '').trim().split(/\s+/).filter(Boolean).map(t => SIDO_FULL[t] || t);
+}
+function regionGu() { const t = (db.settings.region || '').trim().split(/\s+/); return t[t.length - 1] || ''; }
+// 지번주소에서 동명 추출("서울특별시 광진구 중곡동 245-5" → 중곡동). 도로명뿐이면 빈 값.
+function dongFromAddress(addr) { const m = (addr || '').match(/([가-힣]+동)(?=\s)/); return m ? m[1] : ''; }
+
+async function relayFetch(q, regionCode) {
+  const u = RELAY_BASE + '/api/restaurants?q=' + encodeURIComponent(q) +
+    (regionCode ? '&region=' + encodeURIComponent(regionCode) : '');
+  const res = await fetch(u);
+  const j = await res.json();
+  if (!res.ok || !Array.isArray(j)) throw new Error((j && j.error) || 'HTTP ' + res.status);
+  return j;
+}
+async function fetchLiveStores(token) {
+  if (liveCache.has(token)) return liveCache.get(token);
+  const code = REGION_CODES[regionGu()];
+  let rows = [];
+  if (code) { try { rows = await relayFetch(token, code); } catch (_) { rows = []; } }
+  if (rows.length === 0) rows = await relayFetch(token, '');   // 코드 미지원·불일치 폴백: 이름 검색
+  const toks = regionTokens();
+  const out = [];
+  const seen = new Set();
+  for (const r of rows) {
+    const addr = r.address || '';
+    if (toks.length && !toks.every(t => addr.includes(t))) continue;  // 설정 지역 주소만
+    const key = (r.restaurant_id || '') + '|' + r.name;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ name: r.name, dong: dongFromAddress(addr), address: addr, restaurantId: r.restaurant_id || '' });
+  }
+  liveCache.set(token, out);
+  return out;
+}
+function triggerLiveSearch(q) {
+  const tokens = q.trim().split(/\s+/).filter(Boolean);
+  // API 질의 토큰: 초성이 아닌 가장 긴 어절(2자 이상). 없으면(초성만 등) 조회 생략.
+  const apiToken = tokens.filter(t => !/^[ㄱ-ㅎ]+$/.test(t) && t.length >= 2)
+    .sort((a, b) => b.length - a.length)[0] || '';
+  if (!apiToken) { live.status = 'idle'; live.token = ''; live.items = []; return; }
+  if (live.token === apiToken && live.status === 'ok') return;
+  const seq = ++liveSeq;
+  live.token = apiToken; live.status = 'loading';
+  renderStoreSearch(document.getElementById('store-search').value);
+  fetchLiveStores(apiToken).then(items => {
+    if (seq !== liveSeq) return;                       // 더 최신 검색이 시작됨
+    live.items = items; live.status = 'ok';
+    renderStoreSearch(document.getElementById('store-search').value);
+  }).catch(() => {
+    if (seq !== liveSeq) return;
+    live.items = []; live.status = 'error';            // 오프라인 등 → 샘플 폴백
+    renderStoreSearch(document.getElementById('store-search').value);
+  });
+}
+
 function renderStoreSearch(q) {
   const wrap = document.getElementById('store-search-result');
   q = q.trim();
   const tokens = q.split(/\s+/).map(normText).filter(Boolean);
-  let list = SAMPLE_STORES.map(s => ({ s, score: tokens.length ? storeMatchScore(s, tokens) : 0 }))
+
+  // 검색 풀: 실시간 결과 + 내가 등록한 곳. 실시간이 안 될 때(오프라인·초성만)는 내장 샘플로 폴백.
+  const pool = [];
+  const poolSeen = new Set();
+  const pushPool = (s, kind) => {
+    const key = normText(s.name) + '|' + normText(s.dong || '');
+    if (poolSeen.has(key)) return;
+    poolSeen.add(key);
+    pool.push({ s, kind });
+  };
+  for (const st of db.stores) pushPool(st, 'mine');
+  if (live.status === 'ok') for (const s of live.items) pushPool(s, 'live');
+  // 샘플은 실시간 검색이 불가능할 때만(오프라인 오류, 초성만 입력) — 로딩 중엔 섞지 않음(허위 등록 방지)
+  if (q && (live.status === 'error' || live.status === 'idle')) for (const s of SAMPLE_STORES) pushPool(s, 'sample');
+
+  let list = pool.map(x => ({ ...x, score: tokens.length ? storeMatchScore(x.s, tokens) : 0 }))
     .filter(x => x.score >= 0)
     .map(x => ({ ...x, done: !!findStoreByName(x.s.name) }));
-  // 미등록 우선, 점수 높은 순
   list.sort((a, b) => (a.done - b.done) || (b.score - a.score));
 
   wrap.innerHTML = '';
-  if (list.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'empty';
-    empty.style.padding = '16px 0 4px';
-    empty.innerHTML = '목록에 없는 음식점이에요.';
-    wrap.appendChild(empty);
-    // 입력한 이름 그대로 원터치 등록 (재입력 불필요)
-    if (!findStoreByName(q)) {
-      const btn = document.createElement('button');
-      btn.className = 'sr-quick-add';
-      btn.textContent = '「' + q + '」 이 이름으로 바로 등록';
-      btn.addEventListener('click', () => {
-        addStore(q, '', '자유입력');
-        document.getElementById('modal-store').classList.remove('show');
-        refreshCurrent();
-        toast('「' + q + '」 등록 완료');
-      });
-      wrap.appendChild(btn);
-    } else {
-      empty.innerHTML = '「' + q + '」은(는) 이미 등록되어 있어요.';
+  if (live.status === 'loading') {
+    const st = document.createElement('div');
+    st.className = 'sr-status';
+    st.textContent = '🔍 ' + (regionGu() || '지역') + ' 실제 음식점을 찾는 중…';
+    wrap.appendChild(st);
+  }
+  if (live.status === 'error' && q) {
+    const st = document.createElement('div');
+    st.className = 'sr-status';
+    st.textContent = '⚠️ 실시간 검색이 안 돼요(오프라인?). 내장 목록에서만 찾는 중';
+    wrap.appendChild(st);
+  }
+
+  if (!q && list.length === 0) {
+    const st = document.createElement('div');
+    st.className = 'sr-status';
+    st.textContent = '음식점 이름을 입력해 보세요 (예: 김밥, 불고기)';
+    wrap.appendChild(st);
+    return;
+  }
+  if (list.length === 0 && q) {
+    if (live.status !== 'loading') {
+      const empty = document.createElement('div');
+      empty.className = 'empty';
+      empty.style.padding = '16px 0 4px';
+      empty.textContent = '검색 결과가 없어요.';
+      wrap.appendChild(empty);
+      // 입력한 이름 그대로 원터치 등록 (재입력 불필요)
+      if (!findStoreByName(q)) {
+        const btn = document.createElement('button');
+        btn.className = 'sr-quick-add';
+        btn.textContent = '「' + q + '」 이 이름으로 바로 등록';
+        btn.addEventListener('click', () => {
+          addStore(q, '', '자유입력');
+          document.getElementById('modal-store').classList.remove('show');
+          refreshCurrent();
+          toast('「' + q + '」 등록 완료');
+        });
+        wrap.appendChild(btn);
+      } else {
+        wrap.lastChild.textContent = '「' + q + '」은(는) 이미 등록되어 있어요.';
+      }
+      document.getElementById('store-free-name').value = q;
     }
-    document.getElementById('store-free-name').value = q;
     return;
   }
   for (const { s, done } of list) {
     const div = document.createElement('div');
     div.className = 'sr-item' + (done ? ' registered' : '');
-    div.innerHTML = '<b></b><span class="sr-dong"></span>' + (done ? ' <span style="font-size:12px;">✔ 등록됨</span>' : '');
+    div.innerHTML = '<b></b><span class="sr-dong"></span>' + (done ? ' <span style="font-size:12px;">✔ 등록됨</span>' : '') + '<span class="sr-addr"></span>';
     div.querySelector('b').textContent = s.name;
-    div.querySelector('.sr-dong').textContent = s.dong;
+    div.querySelector('.sr-dong').textContent = s.dong || '';
+    if (s.address) div.querySelector('.sr-addr').textContent = s.address;
     div.addEventListener('click', () => {
       if (done) { toast('이미 등록된 음식점이에요'); return; }
-      addStore(s.name, s.dong, '검색');
+      addStore(s.name, s.dong, '검색', s.restaurantId ? { restaurantId: s.restaurantId } : null);
       document.getElementById('modal-store').classList.remove('show');
       refreshCurrent();
       toast('「' + s.name + '」 등록 완료');
@@ -957,7 +1077,12 @@ function renderStoreSearch(q) {
     wrap.appendChild(div);
   }
 }
-document.getElementById('store-search').addEventListener('input', e => renderStoreSearch(e.target.value));
+document.getElementById('store-search').addEventListener('input', e => {
+  clearTimeout(liveTimer);
+  const v = e.target.value;
+  renderStoreSearch(v);                                   // 즉시: 로컬(등록분·캐시·샘플)
+  liveTimer = setTimeout(() => triggerLiveSearch(v), 350); // 350ms 디바운스 후 실시간 조회
+});
 document.getElementById('btn-store-free-add').addEventListener('click', () => {
   const name = document.getElementById('store-free-name').value.trim();
   const dong = document.getElementById('store-free-dong').value.trim();
