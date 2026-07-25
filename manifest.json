@@ -1,0 +1,17 @@
+{
+  "name": "밥장부 직원용",
+  "short_name": "밥장부",
+  "description": "음식점 선금·사용액을 내 폰에서 간편하게 기록",
+  "lang": "ko",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f2f7f5",
+  "theme_color": "#0ea472",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -3,20 +3,30 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="theme-color" content="#2f6f4f">
+<meta name="theme-color" content="#0ea472">
+<meta name="description" content="음식점 선금·사용액을 내 폰에서 간편하게 기록하는 밥장부 직원용 앱">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="밥장부">
 <title>밥장부 직원용</title>
 <style>
   /* ===== 기본 ===== */
   :root {
-    --green: #2f6f4f;
-    --green-dark: #245a3f;
-    --green-light: #e8f3ed;
-    --red: #c0392b;
-    --red-light: #fdecea;
-    --gray-bg: #f4f5f6;
-    --gray-line: #e2e4e6;
-    --gray-text: #7a828a;
-    --text: #22282e;
+    /* 산뜻한 에메랄드·틸 팔레트 */
+    --green: #0ea472;
+    --green-dark: #0b8a60;
+    --green-light: #e6f7f0;
+    --teal: #0891b2;
+    --red: #e5484d;
+    --red-light: #fdeeee;
+    --gray-bg: #f2f7f5;
+    --gray-line: #e0eae5;
+    --gray-text: #68776f;
+    --text: #1e2a24;
     --radius: 14px;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -52,7 +62,7 @@
   /* ===== 공통 요소 ===== */
   h1 { font-size: 20px; margin-bottom: 4px; }
   .sub { color: var(--gray-text); font-size: 13px; margin-bottom: 16px; }
-  .card { background: #fff; border-radius: var(--radius); padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+  .card { background: #fff; border-radius: var(--radius); padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 10px rgba(14,90,64,.07); }
   .btn {
     display: block; width: 100%; padding: 15px; border: none; border-radius: var(--radius);
     background: var(--green); color: #fff; font-size: 17px; font-weight: 700; cursor: pointer;
@@ -79,10 +89,10 @@
   #screen-setup .sub { text-align: center; }
 
   /* ===== ① 홈 ===== */
-  .total-card { background: var(--green); color: #fff; }
-  .total-card .t-label { font-size: 13px; opacity: .85; }
+  .total-card { background: linear-gradient(135deg, var(--green) 0%, var(--teal) 100%); color: #fff; box-shadow: 0 6px 18px rgba(14,164,114,.28); }
+  .total-card .t-label { font-size: 13px; opacity: .9; }
   .total-card .t-amount { font-size: 32px; font-weight: 800; margin-top: 2px; }
-  .total-card .t-region { font-size: 12px; opacity: .75; margin-top: 6px; }
+  .total-card .t-region { font-size: 12px; opacity: .8; margin-top: 6px; }
 
   .nl-box textarea {
     width: 100%; border: none; resize: none; font-size: 16px; font-family: inherit;
@@ -536,23 +546,59 @@ function parseNL(text) {
   else result.type = '사용';
 
   // --- 4) 음식점 매칭 — 등록된 음식점만 허용 (미등록 가게 기록은 오류) ---
-  // "~에/에서" 앞 어절 = 가게 호칭 후보 (금액은 이미 제거된 상태)
-  const candM = rest.match(/([가-힣A-Za-z0-9]{2,})\s*(?:에서|에)(?=\s|$)/);
-  const cand = candM ? candM[1] : '';
-  // 공백 무시·부분 일치: 공공데이터 정식 상호는 길어서("김밥나라 중곡점")
-  // 줄여 부르는 경우("김밥나라")가 많다. 호칭과 상호가 서로 포함 관계면 같은 가게(긴 일치 우선).
+  // 문장에서 가게 호칭 후보 토큰을 뽑는다: 유형·시점 표현을 뺀 어절(2자 이상),
+  // 조사(에/에서/을/를) 제거형, 인접 어절 결합("강경 불고기"→"강경불고기") 모두 포함.
+  // "~에" 조사가 없어도("강경불고기 12000원") 인식되도록 어절 전체를 후보로 삼는다.
+  const STOP_RE = /^(사용|충전|입금|결제|계산|먹었|먹음|썼|씀|시켰|넣었|채웠|했|오늘|어제|그제|내일|그리고|에서|에다)/;
+  const rawWords = rest.split(/\s+/).filter(w => /[가-힣A-Za-z0-9]{2,}/.test(w));
+  const words = [];
+  for (const w of rawWords) {
+    if (STOP_RE.test(w)) continue;
+    words.push(w);
+    const stripped = w.replace(/(에서|에|을|를)$/, '');   // 조사 제거형도 후보로
+    if (stripped !== w && stripped.length >= 2) words.push(stripped);
+  }
+  for (let i = 0; i + 1 < rawWords.length; i++) {          // 인접 어절 결합
+    if (STOP_RE.test(rawWords[i]) || STOP_RE.test(rawWords[i + 1])) continue;
+    words.push(rawWords[i] + rawWords[i + 1].replace(/(에서|에|을|를)$/, ''));
+  }
+  const tokens = [...new Set(words.map(normText).filter(t => t.length >= 2))];
+
+  // 유사도: 포함 관계면 100%, 아니면 최장 공통 부분문자열 ÷ 짧은 쪽 길이.
+  // 70% 이상이면 같은 가게 후보로 보고 확인 카드에 띄워 사용자가 최종 확인한다.
+  const SIM_MIN = 0.7;
   const restN = normText(rest);
-  const candN = normText(cand);
-  let best = null, bestLen = 0;
+  let best = null, bestScore = 0, bestSim = 0;
   for (const s of db.stores) {
     const n = normText(s.name);
-    let hit = 0;
-    if (n && restN.includes(n)) hit = n.length;                              // 문장이 정식 상호 전체 포함
-    else if (candN && (n.includes(candN) || candN.includes(n))) hit = Math.min(n.length, candN.length);
-    if (hit > bestLen) { best = s; bestLen = hit; }
+    if (!n) continue;
+    let score = 0, sim = 0;
+    if (restN.includes(n)) { sim = 1; score = 1000 + n.length; }   // 문장이 정식 상호 전체 포함(최우선)
+    else {
+      for (const t of tokens) {
+        let tSim = 0;
+        if (n.includes(t) || t.includes(n)) tSim = 1;
+        else {
+          const l = lcsLen(n, t);
+          tSim = l / Math.min(n.length, t.length);
+        }
+        const matched = Math.min(n.length, t.length) * tSim;
+        if (tSim >= SIM_MIN && matched >= 2) {
+          const sc = tSim * 100 + matched;                          // 유사도 우선, 일치 길이 보조
+          if (sc > score) { score = sc; sim = tSim; }
+        }
+      }
+    }
+    if (score > bestScore) { best = s; bestScore = score; bestSim = sim; }
   }
-  if (best) result.store = best;
-  else result.freeName = cand;   // 매칭 실패 시 오류 안내용 호칭 (자동 등록 안 함)
+  if (best) {
+    result.store = best;
+    result.fuzzy = bestSim < 1;   // 비슷한 이름 추정 매칭 → 확인 카드에 안내
+  } else {
+    // 오류 안내용 호칭: "~에/에서" 앞 어절 우선, 없으면 가장 긴 후보 어절
+    const candM = rest.match(/([가-힣A-Za-z0-9]{2,})\s*(?:에서|에)(?=\s|$)/);
+    result.freeName = candM ? candM[1] : (words.slice().sort((a, b) => b.length - a.length)[0] || '');
+  }
 
   if (!result.amount && !result.store && !result.freeName) return null;
   return result;
@@ -757,6 +803,7 @@ function renderNLConfirm() {
   }
   if (!r.amount) warn += '<div class="c-warn">⚠️ 금액을 인식하지 못했어요. 문장을 고쳐 다시 인식해 주세요</div>';
   if (overUse) warn += '<div class="c-warn">⚠️ 충전 잔액(' + comma(bal) + '원)보다 많이 사용할 수 없어요</div>';
+  if (r.store && r.fuzzy) warn += '<div class="c-note">📌 등록된 음식점 중 가장 비슷한 이름으로 인식했어요. 다른 가게라면 [취소]해 주세요.</div>';
 
   wrap.innerHTML =
     '<div class="card confirm-card">' +
@@ -1054,6 +1101,21 @@ function openStoreModal() {
 // --- 검색 매칭: 공백 무시 + 어절 AND + 초성 지원 ---
 const CHOSUNG = ['ㄱ','ㄲ','ㄴ','ㄷ','ㄸ','ㄹ','ㅁ','ㅂ','ㅃ','ㅅ','ㅆ','ㅇ','ㅈ','ㅉ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
 function normText(s) { return (s || '').replace(/\s+/g, '').toLowerCase(); }
+// 최장 공통 부분문자열 길이 (음식점명 유사도 판정용)
+function lcsLen(a, b) {
+  let best = 0;
+  let m = new Array(b.length + 1).fill(0);
+  for (let i = 1; i <= a.length; i++) {
+    let prev = 0;
+    for (let j = 1; j <= b.length; j++) {
+      const tmp = m[j];
+      m[j] = a[i - 1] === b[j - 1] ? prev + 1 : 0;
+      if (m[j] > best) best = m[j];
+      prev = tmp;
+    }
+  }
+  return best;
+}
 function toChosung(s) {
   let out = '';
   for (const ch of s) {
@@ -1246,6 +1308,15 @@ document.getElementById('btn-store-free-add').addEventListener('click', () => {
 document.getElementById('btn-store-close').addEventListener('click', () => {
   document.getElementById('modal-store').classList.remove('show');
 });
+
+/* =====================================================
+   PWA 서비스워커 등록 (오프라인 캐시 + 홈 화면 설치)
+===================================================== */
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => { /* 등록 실패해도 앱 동작에는 지장 없음 */ });
+  });
+}
 
 function refreshCurrent() {
   const active = document.querySelector('.screen.active');
