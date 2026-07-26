@@ -317,21 +317,21 @@
     <button class="btn" id="btn-save-tx" style="margin-top:16px;">저장</button>
   </section>
 
-  <!-- ③ 사용이력 -->
-  <section class="screen" id="screen-history">
-    <h1>사용이력</h1>
-    <p class="sub">기록을 누르면 수정·삭제할 수 있어요</p>
-    <div class="label">음식점 필터</div>
-    <select id="history-filter"><option value="">전체</option></select>
-    <div id="history-list"></div>
-  </section>
-
-  <!-- ④ 관리 -->
+  <!-- ③ 관리 (사용이력 포함) -->
   <section class="screen" id="screen-manage">
     <h1>관리</h1>
     <div class="label">음식점 관리</div>
     <div class="card mgmt-list" id="mgmt-stores"></div>
     <button class="btn ghost" id="btn-hist-add-store">+ 음식점 등록</button>
+
+    <div class="label" style="margin-top:24px;">사용이력</div>
+    <button class="btn ghost" id="btn-toggle-history">📋 사용이력 보기</button>
+    <div id="history-wrap" style="display:none;">
+      <p class="sub">기록을 누르면 수정·삭제할 수 있어요</p>
+      <div class="label">음식점 필터</div>
+      <select id="history-filter"><option value="">전체</option></select>
+      <div id="history-list"></div>
+    </div>
 
     <div class="label" style="margin-top:24px;">데이터 관리</div>
     <div class="card">
@@ -351,7 +351,6 @@
   <!-- 하단 탭바 (입력 화면은 현황의 음식점 카드에서 진입) -->
   <nav id="tabbar">
     <button data-screen="screen-home" class="on"><span class="ico">🏠</span>현황</button>
-    <button data-screen="screen-history"><span class="ico">📋</span>사용이력</button>
     <button data-screen="screen-manage"><span class="ico">⚙️</span>관리</button>
   </nav>
 
@@ -629,7 +628,6 @@ function showScreen(id) {
   document.getElementById('tabbar').classList.toggle('show', id !== 'screen-setup');
   if (id === 'screen-home') renderHome();
   if (id === 'screen-input') renderInput();
-  if (id === 'screen-history') renderHistory();
   if (id === 'screen-manage') renderManage();
   window.scrollTo(0, 0);
 }
@@ -977,7 +975,7 @@ document.getElementById('btn-save-tx').addEventListener('click', () => {
 document.getElementById('btn-input-back').addEventListener('click', () => showScreen('screen-home'));
 
 /* =====================================================
-   ③ 사용이력
+   사용이력 (관리 화면 내 접이식 목록)
 ===================================================== */
 function renderHistory() {
   // 필터 셀렉트
@@ -1027,8 +1025,16 @@ function renderHistory() {
 }
 document.getElementById('history-filter').addEventListener('change', renderHistory);
 
+document.getElementById('btn-toggle-history').addEventListener('click', () => {
+  const wrap = document.getElementById('history-wrap');
+  const open = wrap.style.display === 'none';
+  wrap.style.display = open ? '' : 'none';
+  document.getElementById('btn-toggle-history').textContent = open ? '📋 사용이력 닫기' : '📋 사용이력 보기';
+  if (open) renderHistory();
+});
+
 /* =====================================================
-   ④ 관리 (음식점·데이터)
+   ③ 관리 (음식점·사용이력·데이터)
 ===================================================== */
 function renderManage() {
   const mgmt = document.getElementById('mgmt-stores');
@@ -1059,6 +1065,9 @@ function renderManage() {
   }
 
   document.getElementById('mgmt-region').textContent = db.settings.region || '';
+
+  // 사용이력이 펼쳐져 있으면 목록도 함께 갱신
+  if (document.getElementById('history-wrap').style.display !== 'none') renderHistory();
 }
 document.getElementById('btn-hist-add-store').addEventListener('click', openStoreModal);
 
@@ -1347,7 +1356,6 @@ function refreshCurrent() {
   if (!active) return;
   if (active.id === 'screen-home') renderHome();
   if (active.id === 'screen-input') renderInput();
-  if (active.id === 'screen-history') renderHistory();
   if (active.id === 'screen-manage') renderManage();
 }
 
