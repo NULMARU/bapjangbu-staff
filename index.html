@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="theme-color" content="#0ea472">
+<meta name="theme-color" content="#1e2c63">
 <meta name="description" content="음식점 선금·사용액을 내 폰에서 간편하게 기록하는 밥장부 직원용 앱">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -14,221 +14,482 @@
 <meta name="apple-mobile-web-app-title" content="밥장부">
 <title>밥장부 직원용</title>
 <style>
-  /* ===== 기본 ===== */
+  /* =====================================================
+     밥장부 직원용 — 시각 언어 "별이 빛나는 밥상"
+     고흐의 밤하늘 소용돌이 위에 한지 바탕과 먹선을 얹는다.
+     하늘(청)은 한 곳에만 쓰고, 나머지는 한지·먹으로 조용하게.
+     모든 장식은 인라인 CSS/SVG — 외부 요청 0건.
+  ===================================================== */
   :root {
-    /* 산뜻한 에메랄드·틸 팔레트 */
-    --green: #0ea472;
-    --green-dark: #0b8a60;
-    --green-light: #e6f7f0;
-    --teal: #0891b2;
-    --red: #e5484d;
-    --red-light: #fdeeee;
-    --gray-bg: #f2f7f5;
-    --gray-line: #e0eae5;
-    --gray-text: #68776f;
-    --text: #1e2a24;
-    --radius: 14px;
+    /* 오방색을 절제해 옮긴 팔레트 */
+    --paper:      #e9e2d2;   /* 한지 바탕 */
+    --paper-card: #fbf7ed;   /* 덧댄 한지 (카드) */
+    --paper-sunk: #e2dac6;   /* 눌린 한지 (토글 홈) */
+    --paper-edge: #d5c9b0;   /* 종이 결 */
+    --ink:        #191c24;   /* 먹 */
+    --ink-soft:   #5c5a52;   /* 묽은 먹 */
+    --indigo:     #1e2c63;   /* 쪽빛 (청) — 주조색 */
+    --indigo-deep:#0b1230;
+    --cobalt:     #3f62c4;
+    --gold:       #f2c14e;   /* 치자 (황) — 밤하늘 위에서만 */
+    --gold-ink:   #8a6412;
+    --jade:       #0f6a55;   /* 청록 — 충전 */
+    --dancheong:  #b22f2a;   /* 단청 적 — 사용 */
+    --radius: 16px;
+    --tap: 48px;             /* 최소 터치 타겟 */
+    --serif: "AppleMyungjo", "Apple SD Gothic Neo", "Nanum Myeongjo", Batang, "Batang", "Times New Roman", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
+    /* 한지 섬유결 — data URI (네트워크 요청 아님) */
+    --fiber: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23f)' opacity='0.34'/%3E%3C/svg%3E");
   }
+
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { height: 100%; }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, "Malgun Gothic", "Noto Sans KR", sans-serif;
-    background: var(--gray-bg);
-    color: var(--text);
+    font-family: var(--sans);
+    background: var(--paper);
+    background-image: var(--fiber);
+    color: var(--ink);
     font-size: 16px;
+    line-height: 1.5;
+    -webkit-text-size-adjust: 100%;
   }
-  #app { max-width: 480px; margin: 0 auto; min-height: 100dvh; display: flex; flex-direction: column; background: var(--gray-bg); }
+  #app {
+    max-width: 480px; margin: 0 auto; min-height: 100dvh;
+    display: flex; flex-direction: column;
+    background: var(--paper);
+    background-image: var(--fiber);
+    box-shadow: 0 0 0 1px rgba(120,104,74,.18);
+    overflow-x: hidden;
+  }
+  :focus-visible { outline: 3px solid var(--cobalt); outline-offset: 2px; }
+
+  /* ===== 상단 표제 (한지 머리띠) ===== */
+  #appbar {
+    position: sticky; top: 0; z-index: 40; display: none;
+    align-items: center; gap: 9px;
+    padding: 10px 16px;
+    padding-top: calc(10px + env(safe-area-inset-top, 0px));
+    background: linear-gradient(180deg, #fdfaf3 0%, var(--paper-card) 100%);
+    border-bottom: 1px solid var(--paper-edge);
+  }
+  #appbar.show { display: flex; }
+  #appbar .mark { width: 30px; height: 30px; flex: none; display: block; }
+  #appbar .wordmark { font-family: var(--serif); font-size: 19px; letter-spacing: .04em; color: var(--indigo); }
+  #appbar .rolemark {
+    font-size: 10px; letter-spacing: .22em; color: var(--ink-soft);
+    border: 1px solid var(--paper-edge); border-radius: 999px; padding: 3px 8px 3px 10px;
+    margin-left: auto; white-space: nowrap;
+  }
 
   /* ===== 화면 전환 ===== */
-  .screen { display: none; flex: 1; flex-direction: column; padding: 16px 16px 90px; }
-  .screen.active { display: flex; }
+  .screen { display: none; flex: 1; flex-direction: column; padding: 16px 16px 104px; }
+  .screen.active { display: flex; animation: rise .26s ease both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
   /* ===== 하단 탭바 ===== */
   #tabbar {
     position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
     width: 100%; max-width: 480px; display: none;
-    background: #fff; border-top: 1px solid var(--gray-line);
+    background: linear-gradient(180deg, var(--paper-card) 0%, #f6f0e2 100%);
+    border-top: 1px solid var(--paper-edge);
     padding-bottom: env(safe-area-inset-bottom);
     z-index: 50;
   }
   #tabbar.show { display: flex; }
   #tabbar button {
-    flex: 1; padding: 10px 0 12px; border: none; background: none;
-    font-size: 12px; color: var(--gray-text); cursor: pointer;
+    flex: 1; min-height: 58px; padding: 8px 0 10px; border: none; background: none;
+    font-family: var(--sans); font-size: 12px; letter-spacing: .06em; color: var(--ink-soft); cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
   }
-  #tabbar button .ico { display: block; font-size: 22px; margin-bottom: 2px; }
-  #tabbar button.on { color: var(--green); font-weight: 700; }
+  #tabbar button .i { width: 24px; height: 24px; display: block; }
+  #tabbar button.on { color: var(--indigo); font-weight: 700; }
+  #tabbar button.on .i { color: var(--indigo); }
 
-  /* ===== 공통 요소 ===== */
-  h1 { font-size: 20px; margin-bottom: 4px; }
-  .sub { color: var(--gray-text); font-size: 13px; margin-bottom: 16px; }
-  .card { background: #fff; border-radius: var(--radius); padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 10px rgba(14,90,64,.07); }
+  /* ===== 공통 ===== */
+  h1 { font-family: var(--serif); font-size: 23px; font-weight: 400; letter-spacing: .02em; margin-bottom: 4px; }
+  .sub { color: var(--ink-soft); font-size: 13.5px; margin-bottom: 16px; }
+  .card {
+    background: var(--paper-card);
+    background-image: var(--fiber);
+    border: 1px solid var(--paper-edge);
+    border-radius: var(--radius);
+    padding: 16px; margin-bottom: 12px;
+    box-shadow: 0 1px 0 rgba(255,255,255,.7) inset, 0 2px 7px rgba(60,46,20,.07);
+  }
+
+  /* 붓질 괘선이 붙은 소제목 */
+  .label {
+    display: flex; align-items: center; gap: 9px;
+    font-size: 11.5px; font-weight: 700; letter-spacing: .18em;
+    color: var(--ink-soft); margin: 20px 0 8px;
+  }
+  .label::after {
+    content: ''; flex: 1; height: 2px; border-radius: 2px;
+    background: linear-gradient(90deg, var(--paper-edge) 0%, rgba(213,201,176,.55) 45%, transparent 100%);
+  }
+  .modal .label:first-of-type { margin-top: 16px; }
+
   .btn {
-    display: block; width: 100%; padding: 15px; border: none; border-radius: var(--radius);
-    background: var(--green); color: #fff; font-size: 17px; font-weight: 700; cursor: pointer;
+    display: block; width: 100%; min-height: var(--tap); padding: 14px;
+    border: none; border-radius: 13px;
+    background: var(--indigo); color: #fdfaf3;
+    font-family: var(--sans); font-size: 17px; font-weight: 700; letter-spacing: .01em; cursor: pointer;
+    box-shadow: 0 2px 0 rgba(11,18,48,.45);
+    transition: transform .1s ease, background .12s ease;
   }
-  .btn:active { background: var(--green-dark); }
-  .btn.ghost { background: #fff; color: var(--green); border: 1.5px solid var(--green); }
-  .btn.small { width: auto; display: inline-block; padding: 9px 16px; font-size: 14px; border-radius: 10px; }
-  .btn.danger { background: var(--red); }
-  .btn.gray { background: #fff; color: var(--gray-text); border: 1.5px solid var(--gray-line); }
-  input[type=text], input[type=date], input[type=number], select {
-    width: 100%; padding: 13px; border: 1.5px solid var(--gray-line); border-radius: 12px;
-    font-size: 16px; background: #fff; color: var(--text);
+  .btn:active { background: var(--indigo-deep); transform: translateY(1px); box-shadow: 0 1px 0 rgba(11,18,48,.45); }
+  .btn .i { width: 19px; height: 19px; vertical-align: -4px; margin-right: 6px; }
+  .btn.ghost {
+    background: var(--paper-card); background-image: var(--fiber);
+    color: var(--indigo); border: 1.5px solid var(--indigo); box-shadow: none;
   }
-  input:focus, select:focus { outline: none; border-color: var(--green); }
+  .btn.ghost:active { background: #e7e9f4; }
+  .btn.small { width: auto; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 12px 14px; font-size: 14.5px; border-radius: 11px; }
+  .btn.small .i { width: 17px; height: 17px; margin-right: 0; vertical-align: 0; }
+  .btn.danger { background: var(--dancheong); box-shadow: 0 2px 0 rgba(114,28,24,.5); }
+  .btn.danger:active { background: #8f2521; }
+  .btn.gray {
+    background: var(--paper-card); background-image: var(--fiber);
+    color: var(--ink-soft); border: 1.5px solid var(--paper-edge); box-shadow: none;
+  }
+  .btn.gray:active { background: var(--paper-sunk); }
+  .btn[disabled] { cursor: default; }
+
+  input[type=text], input[type=search], input[type=date], input[type=number], select {
+    width: 100%; min-height: var(--tap); padding: 12px 13px;
+    border: 1.5px solid var(--paper-edge); border-radius: 12px;
+    font-family: var(--sans); font-size: 16px;
+    background: #fffdf7; color: var(--ink);
+  }
+  select {
+    appearance: none; -webkit-appearance: none; padding-right: 38px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231e2c63' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 12px center; background-size: 17px;
+  }
+  input::placeholder, textarea::placeholder { color: #6f6a5b; }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--indigo); box-shadow: 0 0 0 3px rgba(30,44,99,.14); }
   .row { display: flex; gap: 8px; }
   .row > * { flex: 1; }
-  .label { font-size: 13px; font-weight: 700; color: var(--gray-text); margin: 14px 0 6px; }
-  .empty { text-align: center; color: var(--gray-text); padding: 36px 0; font-size: 14px; line-height: 1.7; }
+  .empty { text-align: center; color: var(--ink-soft); padding: 34px 0; font-size: 14px; line-height: 1.8; }
+
+  /* 아이콘 기본 */
+  .i { display: inline-block; width: 20px; height: 20px; stroke-width: 1.7; vertical-align: -3px; }
 
   /* ===== ⓪ 최초 설정 ===== */
-  #screen-setup { justify-content: center; padding-bottom: 16px; }
-  #screen-setup .logo { text-align: center; font-size: 46px; margin-bottom: 8px; }
-  #screen-setup h1 { text-align: center; font-size: 24px; }
+  #screen-setup { justify-content: center; padding-bottom: 24px; }
+  #screen-setup .seal { display: block; width: 96px; height: 96px; margin: 0 auto 10px; }
+  #screen-setup h1 { text-align: center; font-size: 27px; }
   #screen-setup .sub { text-align: center; }
 
-  /* ===== ① 홈 ===== */
-  .total-card { background: linear-gradient(135deg, var(--green) 0%, var(--teal) 100%); color: #fff; box-shadow: 0 6px 18px rgba(14,164,114,.28); }
-  .total-card .t-label { font-size: 13px; opacity: .9; }
-  .total-card .t-amount { font-size: 32px; font-weight: 800; margin-top: 2px; }
-  .total-card .t-region { font-size: 12px; opacity: .8; margin-top: 6px; }
+  /* ===== ① 밤하늘 카드 (이 앱의 유일한 큰 목소리) ===== */
+  .sky-card {
+    position: relative; overflow: hidden; padding: 0;
+    aspect-ratio: 480 / 210;
+    border: 1px solid var(--indigo-deep);
+    background: var(--indigo-deep);
+    box-shadow: 0 6px 20px rgba(11,18,48,.3);
+  }
+  .sky-art { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .sky-body { position: absolute; inset: 0; padding: 18px 18px 16px; display: flex; flex-direction: column; justify-content: flex-end; }
+  .sky-card .t-label {
+    font-size: 11px; letter-spacing: .13em; color: #d5ddf2;
+    text-shadow: 0 1px 3px rgba(7,12,36,.9);
+  }
+  .sky-card .t-amount {
+    font-family: var(--serif); font-size: clamp(28px, 9.2vw, 40px); line-height: 1.15; margin-top: 2px;
+    color: var(--gold); font-variant-numeric: tabular-nums;
+    text-shadow: 0 2px 10px rgba(7,12,36,.95), 0 0 1px rgba(7,12,36,.9);
+  }
+  .sky-card .t-region {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 12px; color: #dfe6f8; margin-top: 8px;
+    text-shadow: 0 1px 3px rgba(7,12,36,.9);
+  }
+  .sky-card .t-region .i { width: 14px; height: 14px; }
+  /* 붓이 흐르는 결 — 아주 느리게 */
+  .swirl-flow { stroke-dasharray: 26 300; animation: flow 26s linear infinite; }
+  .swirl-flow.b { animation-duration: 34s; animation-direction: reverse; }
+  @keyframes flow { to { stroke-dashoffset: -652; } }
+  .twinkle { animation: tw 4.5s ease-in-out infinite; }
+  .twinkle.b { animation-duration: 6.5s; animation-delay: -2s; }
+  .twinkle.c { animation-duration: 5.5s; animation-delay: -3.4s; }
+  @keyframes tw { 0%,100% { opacity: .95; } 50% { opacity: .35; } }
 
+  /* ===== 자연어 입력 ===== */
   .nl-box textarea {
     width: 100%; border: none; resize: none; font-size: 16px; font-family: inherit;
-    background: none; color: var(--text); height: 48px; line-height: 1.5;
+    background: none; color: var(--ink); height: 50px; line-height: 1.55;
   }
-  .nl-box textarea:focus { outline: none; }
-  .nl-hint { font-size: 12px; color: var(--gray-text); margin-top: 4px; }
+  .nl-box textarea:focus { outline: none; box-shadow: none; }
+  .nl-hint { display: flex; align-items: flex-start; gap: 6px; font-size: 12px; color: var(--ink-soft); margin-top: 6px; line-height: 1.55; }
+  .nl-hint .i { width: 15px; height: 15px; flex: none; margin-top: 2px; }
+  .nl-rule { height: 1px; background: linear-gradient(90deg, var(--paper-edge), rgba(213,201,176,.2)); margin: 4px 0 0; }
 
+  /* ===== 음식점 카드 ===== */
   .store-card { cursor: pointer; }
-  .store-card .sc-head { display: flex; align-items: center; justify-content: space-between; }
-  .store-card .s-name { font-size: 17px; font-weight: 700; }
-  .store-card .s-arrow { font-size: 12px; color: var(--gray-text); margin-right: 6px; display: inline-block; transition: transform .15s; }
+  .store-card .sc-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .store-card .sc-head > .s-name { flex: 1 1 auto; min-width: 0; }
+  .store-card .sc-head > .s-bal-wrap { flex: 0 0 auto; }
+  .store-card .s-name .s-name-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .store-card .s-name { display: flex; align-items: center; gap: 7px; font-size: 17px; font-weight: 700; }
+  .store-card .s-arrow { width: 15px; height: 15px; flex: none; color: var(--ink-soft); transition: transform .18s ease; }
   .store-card.open .s-arrow { transform: rotate(90deg); }
-  .store-card .s-meta { font-size: 12px; color: var(--gray-text); margin-top: 3px; }
-  .store-card .s-bal { font-size: 19px; font-weight: 800; color: var(--green); text-align: right; }
-  .store-card .s-bal.minus { color: var(--red); }
-  .store-card .s-bal-label { font-size: 11px; color: var(--gray-text); text-align: right; }
-  /* 카드 하위: 해당 음식점 사용·충전 내역 (펼침/접힘) */
-  .store-card .sc-tx { display: none; margin-top: 12px; border-top: 1px solid var(--gray-line); }
-  .store-card.open .sc-tx { display: block; }
-  .sc-tx .t-row { display: flex; align-items: center; justify-content: space-between; padding: 9px 2px; border-bottom: 1px solid var(--gray-line); font-size: 14px; }
-  .sc-tx .t-row:last-of-type { border-bottom: none; }
-  .sc-tx .t-info .t-type { font-weight: 700; }
-  .sc-tx .t-info .t-date { color: var(--gray-text); font-size: 12px; margin-top: 1px; }
-  .sc-tx .t-amt { font-weight: 800; }
-  .sc-tx .t-amt.use { color: var(--red); }
-  .sc-tx .t-amt.charge { color: var(--green); }
-  .sc-tx .t-more { font-size: 12px; color: var(--gray-text); text-align: center; padding: 8px 0 2px; }
-  .sc-tx .t-none { font-size: 13px; color: var(--gray-text); text-align: center; padding: 12px 0 4px; }
-  .sc-actions { display: flex; gap: 8px; margin-top: 10px; }
-  .sc-actions button {
-    flex: 1; padding: 12px 0; border: 1.5px solid var(--gray-line); border-radius: 12px;
-    background: #fff; font-size: 14px; font-weight: 700; cursor: pointer; color: var(--text);
+  .store-card .s-meta { font-size: 12px; color: var(--ink-soft); margin-top: 5px; padding-left: 22px; word-break: keep-all; }
+  .store-card .s-bal {
+    font-family: var(--serif); font-size: 21px; color: var(--indigo);
+    text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap;
   }
-  .sc-actions button:active { background: var(--green-light); border-color: var(--green); }
+  .store-card .s-bal.minus { color: var(--dancheong); }
+  .store-card .s-bal-label { font-size: 10px; letter-spacing: .04em; color: var(--ink-soft); text-align: right; }
+  .store-card .sc-tx { display: none; margin-top: 14px; border-top: 1px solid var(--paper-edge); }
+  .store-card.open .sc-tx { display: block; }
+  .sc-tx .t-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 2px; border-bottom: 1px solid rgba(213,201,176,.6); font-size: 14px; }
+  .sc-tx .t-row:last-of-type { border-bottom: none; }
+  .sc-tx .t-info .t-type { display: flex; align-items: center; gap: 6px; font-weight: 700; }
+  .sc-tx .t-info .t-type .i { width: 16px; height: 16px; flex: none; }
+  .sc-tx .t-info .t-date { color: var(--ink-soft); font-size: 12px; margin-top: 2px; }
+  .sc-tx .t-amt { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .sc-tx .t-amt.use { color: var(--dancheong); }
+  .sc-tx .t-amt.charge { color: var(--jade); }
+  .sc-tx .t-more { font-size: 12px; color: var(--ink-soft); text-align: center; padding: 9px 0 2px; }
+  .sc-tx .t-none { font-size: 13px; color: var(--ink-soft); text-align: center; padding: 14px 0 4px; }
+  .sc-actions { display: flex; gap: 8px; margin-top: 12px; }
+  .sc-actions button {
+    flex: 1; min-height: var(--tap); padding: 12px 0;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    border: 1.5px solid var(--paper-edge); border-radius: 12px;
+    background: #fffdf7; font-family: var(--sans); font-size: 14.5px; font-weight: 700; cursor: pointer; color: var(--ink);
+  }
+  .sc-actions button .i { width: 17px; height: 17px; }
+  .sc-actions button:active { background: #eef0f8; border-color: var(--indigo); }
+  .sc-actions button.use-btn .i { color: var(--dancheong); }
+  .sc-actions button.charge-btn .i { color: var(--jade); }
 
-  /* ===== 확인 카드(자연어) ===== */
-  .confirm-card { border: 2px solid var(--green); }
-  .confirm-card .c-title { font-weight: 800; color: var(--green); margin-bottom: 10px; font-size: 15px; }
+  /* ===== 확인 카드 ===== */
+  .confirm-card { border: 1.5px solid var(--indigo); box-shadow: 0 3px 12px rgba(30,44,99,.14); }
+  .confirm-card .c-title {
+    display: flex; align-items: center; gap: 7px;
+    font-weight: 700; color: var(--indigo); margin-bottom: 12px; font-size: 15px;
+  }
+  .confirm-card .c-title .i { width: 19px; height: 19px; flex: none; }
   .confirm-card table { width: 100%; font-size: 15px; border-collapse: collapse; }
-  .confirm-card td { padding: 4px 0; }
-  .confirm-card td:first-child { color: var(--gray-text); width: 74px; }
-  .confirm-card .c-warn { font-size: 13px; color: var(--red); margin-top: 8px; }
-  .confirm-card .c-note { font-size: 13px; color: var(--gray-text); margin-top: 8px; }
+  .confirm-card td { padding: 5px 0; vertical-align: top; }
+  .confirm-card td:first-child { color: var(--ink-soft); width: 74px; font-size: 13px; padding-top: 7px; }
+  .confirm-card .c-cell { display: flex; align-items: center; gap: 6px; }
+  .confirm-card .c-cell .i { width: 16px; height: 16px; flex: none; }
+  .confirm-card .c-warn { display: flex; gap: 6px; font-size: 13px; color: var(--dancheong); margin-top: 10px; line-height: 1.55; }
+  .confirm-card .c-note { display: flex; gap: 6px; font-size: 13px; color: var(--ink-soft); margin-top: 10px; line-height: 1.55; }
+  .confirm-card .c-warn .i, .confirm-card .c-note .i { width: 16px; height: 16px; flex: none; margin-top: 2px; }
 
   /* ===== ② 입력 ===== */
   .input-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
   #btn-input-back {
-    width: 38px; height: 38px; border: none; border-radius: 12px; background: #fff;
-    font-size: 24px; line-height: 1; color: var(--green); font-weight: 700; cursor: pointer;
-    box-shadow: 0 2px 10px rgba(14,90,64,.07);
+    width: var(--tap); height: var(--tap); flex: none; border: 1px solid var(--paper-edge); border-radius: 13px;
+    background: var(--paper-card); color: var(--indigo); cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
   }
-  #btn-input-back:active { background: var(--green-light); }
-  .toggle { display: flex; background: #e4ede9; border-radius: 12px; padding: 4px; margin-bottom: 14px; }
+  #btn-input-back .i { width: 22px; height: 22px; }
+  #btn-input-back:active { background: var(--paper-sunk); }
+  .toggle { display: flex; background: var(--paper-sunk); border-radius: 13px; padding: 4px; margin-bottom: 16px; border: 1px solid var(--paper-edge); }
   .toggle button {
-    flex: 1; padding: 12px; border: none; border-radius: 9px; background: none;
-    font-size: 16px; font-weight: 700; color: var(--gray-text); cursor: pointer;
+    flex: 1; min-height: var(--tap); padding: 12px; border: none; border-radius: 10px; background: none;
+    font-family: var(--sans); font-size: 16px; font-weight: 700; color: var(--ink-soft); cursor: pointer;
   }
-  .toggle button.on { background: #fff; color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.1); }
-  .toggle button.on.use { color: var(--red); }
-  .toggle button.on.charge { color: var(--green); }
+  .toggle button.on { background: #fffdf7; box-shadow: 0 1px 3px rgba(60,46,20,.16); }
+  .toggle button.on.use { color: var(--dancheong); }
+  .toggle button.on.charge { color: var(--jade); }
 
+  /* 장부 괘선 위의 금액 */
   .amount-display {
-    text-align: center; font-size: 36px; font-weight: 800; padding: 14px 0;
-    background: #fff; border-radius: var(--radius); margin-bottom: 12px; min-height: 78px;
+    position: relative; text-align: center;
+    font-family: var(--serif); font-size: 40px; line-height: 1.2;
+    color: var(--indigo); font-variant-numeric: tabular-nums;
+    padding: 18px 0 16px; margin: 16px 0 14px; min-height: 84px;
+    background: var(--paper-card); background-image: var(--fiber);
+    border-top: 2px solid var(--indigo); border-bottom: 1px solid var(--paper-edge);
+    border-radius: 4px 4px 13px 13px;
   }
-  .amount-display .won { font-size: 20px; color: var(--gray-text); font-weight: 400; }
-  .quick-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+  .amount-display .won { font-family: var(--sans); font-size: 18px; color: var(--ink-soft); font-weight: 400; margin-left: 3px; }
+  .quick-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
   .quick-grid button {
-    padding: 15px 0; border: 1.5px solid var(--gray-line); border-radius: 12px; background: #fff;
-    font-size: 15px; font-weight: 700; cursor: pointer; color: var(--text);
+    min-height: var(--tap); padding: 13px 0; border: 1.5px solid var(--paper-edge); border-radius: 12px;
+    background: var(--paper-card); font-family: var(--sans); font-size: 15px; font-weight: 700; cursor: pointer;
+    color: var(--ink); font-variant-numeric: tabular-nums;
   }
-  .quick-grid button:active { background: var(--green-light); border-color: var(--green); }
-  .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+  .quick-grid button:active { background: #eef0f8; border-color: var(--indigo); }
+  .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 8px; }
   .keypad button {
-    padding: 16px 0; border: none; border-radius: 12px; background: #fff;
-    font-size: 22px; font-weight: 700; cursor: pointer; color: var(--text);
-    box-shadow: 0 1px 2px rgba(0,0,0,.05);
+    min-height: 56px; padding: 14px 0; border: 1px solid rgba(213,201,176,.85); border-radius: 12px;
+    background: #fffdf7; font-family: var(--serif); font-size: 24px; cursor: pointer; color: var(--ink);
+    box-shadow: 0 1px 2px rgba(60,46,20,.08);
+    display: inline-flex; align-items: center; justify-content: center;
   }
-  .keypad button:active { background: var(--gray-line); }
+  .keypad button .i { width: 24px; height: 24px; }
+  .keypad button:active { background: var(--paper-sunk); }
 
   /* ===== ③ 내역 ===== */
-  .tx-date { font-size: 13px; font-weight: 700; color: var(--gray-text); margin: 16px 0 6px; }
-  .tx-item { display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: 13px 16px; }
+  .tx-date {
+    display: flex; align-items: center; gap: 9px;
+    font-size: 12px; font-weight: 700; letter-spacing: .1em; color: var(--ink-soft); margin: 18px 0 7px;
+  }
+  .tx-date::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, var(--paper-edge), transparent); }
+  .tx-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; padding: 14px 16px; }
   .tx-item .x-store { font-weight: 700; font-size: 15px; }
-  .tx-item .x-memo { font-size: 12px; color: var(--gray-text); margin-top: 2px; }
-  .tx-item .x-amount { font-size: 16px; font-weight: 800; }
-  .tx-item .x-amount.charge { color: var(--green); }
-  .tx-item .x-amount.use { color: var(--red); }
-  .tx-item .x-method { font-size: 11px; color: var(--gray-text); text-align: right; margin-top: 2px; }
+  .tx-item .x-memo { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+  .tx-item .x-amount { font-size: 17px; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tx-item .x-amount.charge { color: var(--jade); }
+  .tx-item .x-amount.use { color: var(--dancheong); }
+  .tx-item .x-method { font-size: 11px; color: var(--ink-soft); text-align: right; margin-top: 3px; }
 
   .mgmt-list { font-size: 15px; }
-  .mgmt-list .m-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--gray-line); }
+  .mgmt-list .m-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 0; border-bottom: 1px solid rgba(213,201,176,.7); }
   .mgmt-list .m-row:last-child { border-bottom: none; }
+  .mgmt-list .m-row .m-sub { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+  .mgmt-list .m-row .del { flex: none; }
 
   /* ===== 모달 ===== */
   .modal-bg {
-    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 100;
+    display: none; position: fixed; inset: 0; background: rgba(11,18,48,.55); z-index: 100;
     align-items: flex-end; justify-content: center;
   }
-  .modal-bg.show { display: flex; }
+  .modal-bg.show { display: flex; animation: fadein .18s ease both; }
+  @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
   .modal {
-    background: #fff; width: 100%; max-width: 480px; border-radius: 20px 20px 0 0;
-    padding: 20px 16px calc(20px + env(safe-area-inset-bottom)); max-height: 85dvh; overflow-y: auto;
+    position: relative;
+    background: var(--paper-card); background-image: var(--fiber);
+    width: 100%; max-width: 480px; border-radius: 20px 20px 0 0;
+    padding: 22px 16px calc(20px + env(safe-area-inset-bottom));
+    max-height: 86dvh; overflow-y: auto;
+    border-top: 3px solid var(--indigo);
+    animation: slideup .24s cubic-bezier(.2,.8,.3,1) both;
   }
-  .modal h2 { font-size: 18px; margin-bottom: 14px; }
-  .search-result { max-height: 260px; overflow-y: auto; margin-top: 8px; }
+  @keyframes slideup { from { transform: translateY(22px); } to { transform: none; } }
+  .modal h2 { font-family: var(--serif); font-size: 20px; font-weight: 400; margin-bottom: 14px; letter-spacing: .02em; }
+  .search-result { max-height: 260px; overflow-y: auto; margin-top: 10px; }
   .search-result .sr-item {
-    padding: 13px; border-bottom: 1px solid var(--gray-line); cursor: pointer; font-size: 15px;
+    padding: 13px 4px; border-bottom: 1px solid rgba(213,201,176,.7); cursor: pointer; font-size: 15px; min-height: var(--tap);
   }
-  .search-result .sr-item:active { background: var(--green-light); }
-  .search-result .sr-item .sr-dong { color: var(--gray-text); font-size: 13px; margin-left: 6px; }
-  .search-result .sr-item.registered { color: var(--gray-text); }
-  .sr-hint { font-size: 12px; color: var(--gray-text); margin-top: 6px; }
-  .sr-addr { display: block; font-size: 12px; color: var(--gray-text); margin-top: 2px; font-weight: 400; }
-  .sr-status { font-size: 13px; color: var(--gray-text); padding: 10px 2px; }
+  .search-result .sr-item:active { background: #eef0f8; }
+  .search-result .sr-item .sr-dong { color: var(--ink-soft); font-size: 13px; margin-left: 6px; }
+  .search-result .sr-item.registered { color: var(--ink-soft); }
+  .sr-hint { font-size: 12px; color: var(--ink-soft); margin-top: 8px; line-height: 1.6; }
+  .sr-addr { display: block; font-size: 12px; color: var(--ink-soft); margin-top: 3px; font-weight: 400; }
+  .sr-status { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-soft); padding: 10px 2px; }
+  .sr-status .i { width: 16px; height: 16px; flex: none; }
   .sr-quick-add {
-    width: 100%; margin-top: 10px; padding: 14px; border: 1.5px dashed var(--green);
-    border-radius: 12px; background: var(--green-light); color: var(--green);
-    font-size: 15px; font-weight: 700; cursor: pointer;
+    width: 100%; min-height: var(--tap); margin-top: 12px; padding: 14px;
+    border: 1.5px dashed var(--indigo); border-radius: 12px;
+    background: #eef0f8; color: var(--indigo);
+    font-family: var(--sans); font-size: 15px; font-weight: 700; cursor: pointer;
   }
 
   /* ===== 토스트 ===== */
   #toast {
-    position: fixed; bottom: 96px; left: 50%; transform: translateX(-50%);
-    background: rgba(34,40,46,.92); color: #fff; padding: 11px 20px; border-radius: 24px;
-    font-size: 14px; z-index: 200; display: none; white-space: nowrap;
+    position: fixed; bottom: 88px; left: 50%; transform: translateX(-50%);
+    background: var(--indigo-deep); color: #fdfaf3; padding: 12px 20px; border-radius: 999px;
+    font-size: 14px; z-index: 200; display: none; max-width: calc(100% - 32px); text-align: center;
+    border: 1px solid rgba(242,193,78,.4);
+    box-shadow: 0 6px 20px rgba(11,18,48,.35);
+  }
+
+  /* ===== 접근성: 모션 최소화 ===== */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+  }
+
+  /* ===== 좁은 화면 보정 ===== */
+  @media (max-width: 359px) {
+    .sky-card .t-amount { font-size: 30px; }
+    .amount-display { font-size: 34px; }
+    .btn.small { font-size: 13.5px; padding: 12px 10px; }
   }
 </style>
 </head>
 <body>
 <div id="app">
 
+<!-- ===== 아이콘 (인라인 SVG 심벌 — 외부 요청 없음) =====
+     선은 붓끝처럼 둥글게, 형태는 조선 기물에서 따왔다.
+     엽전(충전)·밥그릇과 젓가락(사용)·기와지붕(현황)·붓(관리) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <g id="g-stroke"></g>
+  </defs>
+  <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M2 11c3.5-.6 4-4.6 10-4.6S18.5 10.4 22 11"/><path d="M5 11.6V20h14v-8.4"/><path d="M10 20v-4.4h4V20"/>
+  </symbol>
+  <symbol id="i-brush" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 20.2c.4-2 .8-3.4 2-4.6 1.5-1.5 3.6-1.3 4.6-.3s1.2 3.1-.3 4.6c-1.2 1.2-2.6 1.6-6.3 2.1"/>
+    <path d="M11.5 14.2 20 5.7a1.9 1.9 0 0 0-2.7-2.7l-8.5 8.5"/>
+  </symbol>
+  <symbol id="i-coin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="8.6"/><rect x="8.9" y="8.9" width="6.2" height="6.2" rx="1"/>
+  </symbol>
+  <symbol id="i-meal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M1.8 11.3h12.4a6.2 6.2 0 0 1-12.4 0Z"/><path d="M4.9 19.1h6.2"/>
+    <path d="M17.7 2.9 16.1 12.7"/><path d="M21.5 3.5 19.9 13.3"/>
+  </symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="9" y="2.6" width="6" height="10.4" rx="3"/><path d="M5.4 11.2a6.6 6.6 0 0 0 13.2 0"/><path d="M12 17.8v3.6"/>
+  </symbol>
+  <symbol id="i-speech" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M20.5 5.4v8.2a1.6 1.6 0 0 1-1.6 1.6h-7.2l-4.4 3.6v-3.6H5.1a1.6 1.6 0 0 1-1.6-1.6V5.4a1.6 1.6 0 0 1 1.6-1.6h13.8a1.6 1.6 0 0 1 1.6 1.6Z"/>
+  </symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4.8 16.2 12 9 19.2"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.8 7.8 12 15 19.2"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-scroll" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M14 2.8H7.2v18.4h9.6V5.6Z"/><path d="M14 2.8v2.8h2.8"/><path d="M9.8 11.4h4.4M9.8 15.2h3"/>
+  </symbol>
+  <symbol id="i-export" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 15.6V3.4"/><path d="M8 7.4 12 3.4l4 4"/><path d="M4 15.4v3.6a1.6 1.6 0 0 0 1.6 1.6h12.8a1.6 1.6 0 0 0 1.6-1.6v-3.6"/>
+  </symbol>
+  <symbol id="i-import" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3.4v12.2"/><path d="M8 11.6l4 4 4-4"/><path d="M4 15.4v3.6a1.6 1.6 0 0 0 1.6 1.6h12.8a1.6 1.6 0 0 0 1.6-1.6v-3.6"/>
+  </symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="10.8" cy="10.8" r="7"/><path d="M15.9 15.9 21 21"/>
+  </symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4.4 12.6 9.6 17.8 19.8 6.4"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3.6 2.4 20.4h19.2Z"/><path d="M12 9.8v4.4"/><path d="M12 17.4h.01"/>
+  </symbol>
+  <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="8.6"/><path d="M12 11.4v5.2"/><path d="M12 7.6h.01"/>
+  </symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 21.4s6.8-6.1 6.8-11a6.8 6.8 0 1 0-13.6 0c0 4.9 6.8 11 6.8 11Z"/><circle cx="12" cy="10.2" r="2.4"/>
+  </symbol>
+  <symbol id="i-erase" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M20.4 4.8H8.9L2.6 12l6.3 7.2h11.5Z"/><path d="M12.4 9.6 17 14.4M17 9.6l-4.6 4.8"/>
+  </symbol>
+  <!-- 상표: 소용돌이 밤하늘 위에 기와 한 채 -->
+  <symbol id="i-mark" viewBox="0 0 48 48">
+    <clipPath id="mark-clip"><circle cx="24" cy="24" r="23"/></clipPath>
+    <circle cx="24" cy="24" r="23" fill="#0b1230"/>
+    <path d="M2 30c9-14 24-19 33-11 6 5 4 14-3 15-6 1-9-5-6-9 2-3 7-2 7 2" fill="none" stroke="#3f62c4" stroke-width="3.4" stroke-linecap="round"/>
+    <path d="M4 34c9-13 22-18 30-11" fill="none" stroke="#7f9cf0" stroke-width="1.5" stroke-linecap="round" opacity=".8"/>
+    <circle cx="36" cy="13" r="5" fill="#f2c14e"/>
+    <circle cx="36" cy="13" r="8" fill="none" stroke="#f2c14e" stroke-width="1.1" opacity=".45"/>
+    <g clip-path="url(#mark-clip)" fill="#f2c14e">
+      <path d="M-2 45c4 1 6.5-1 8.5-3 1.8-1.8 3-2.8 5.5-2.8s3.7 1 5.5 2.8c2 2 4.5 4 8.5 3v7H-2Z"/>
+      <path d="M22 46.5c3 .8 5-.8 6.8-2.4 1.5-1.5 2.6-2.4 4.7-2.4s3.2.9 4.7 2.4c1.8 1.6 3.8 3.2 6.8 2.4V52H22Z" opacity=".78"/>
+    </g>
+    <circle cx="24" cy="24" r="23" fill="none" stroke="#f2c14e" stroke-width="1.6" opacity=".55"/>
+  </symbol>
+</svg>
+
+<header id="appbar">
+  <svg class="mark" aria-hidden="true" focusable="false"><use href="#i-mark"/></svg>
+  <span class="wordmark">밥장부</span>
+  <span class="rolemark">직원용</span>
+</header>
+
+
   <!-- ⓪ 최초 설정 -->
   <section class="screen" id="screen-setup">
-    <div class="logo">🍚</div>
+    <svg class="seal" aria-hidden="true" focusable="false"><use href="#i-mark"/></svg>
     <h1>밥장부 직원용</h1>
     <p class="sub">음식점 선금을 내 폰에서 간편하게 관리해요.<br>인적사항은 받지 않아요. 이용 지역만 알려주세요.</p>
     <div class="card">
@@ -254,17 +515,84 @@
 
   <!-- ① 홈(현황) -->
   <section class="screen" id="screen-home">
-    <div class="card total-card">
-      <div class="t-label">전체 남은 선금</div>
-      <div class="t-amount" id="home-total">0원</div>
-      <div class="t-region" id="home-region"></div>
+    <div class="card sky-card">
+      <!-- 이 앱의 유일한 큰 목소리: 고흐의 소용돌이 하늘 아래 기와 마을(김홍도의 무대).
+           원작 이미지는 쓰지 않고 전부 직접 그린 오마주다. -->
+      <svg class="sky-art" viewBox="0 0 480 210" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">
+        <defs>
+          <linearGradient id="sky-g" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#060a1c"/><stop offset=".45" stop-color="#16265e"/><stop offset="1" stop-color="#2b4291"/>
+          </linearGradient>
+          <linearGradient id="scrim-g" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#04081a" stop-opacity="0"/><stop offset=".22" stop-color="#04081a" stop-opacity=".32"/><stop offset=".5" stop-color="#04081a" stop-opacity=".74"/><stop offset="1" stop-color="#04081a" stop-opacity=".8"/>
+          </linearGradient>
+          <radialGradient id="moon-g">
+            <stop offset="0" stop-color="#fff0bd"/><stop offset=".72" stop-color="#f2c14e"/><stop offset="1" stop-color="#f2c14e" stop-opacity=".1"/>
+          </radialGradient>
+        </defs>
+        <rect width="480" height="210" fill="url(#sky-g)"/>
+
+        <!-- 임파스토 붓질: 굵은 결 위에 밝은 결을 겹쳐 얹는다.
+             밤하늘의 물결이 왼쪽에서 솟아 소용돌이로 감겼다가 달을 향해 흘러간다. -->
+        <g fill="none" stroke-linecap="round">
+          <path d="M-40 78C20 26 110 8 176 24c38 9 46 44 16 52-22 6-38-14-24-22 10-5 20 4 14 12" stroke="#3f62c4" stroke-width="9" opacity=".92"/>
+          <path d="M-40 96C26 44 116 26 186 42c40 9 48 42 20 50" stroke="#2f4a9e" stroke-width="14" opacity=".55"/>
+          <path d="M-40 60C24 10 112-6 180 12" stroke="#9db6f5" stroke-width="2.4" opacity=".7" class="swirl-flow"/>
+          <path d="M-40 88C24 38 114 20 184 36" stroke="#c9d8ff" stroke-width="1.6" opacity=".5" class="swirl-flow b"/>
+          <path d="M206 52c46-24 116-30 166-8" stroke="#3f62c4" stroke-width="7" opacity=".7"/>
+          <path d="M210 40c46-22 112-27 160-8" stroke="#8fabf2" stroke-width="1.8" opacity=".55" class="swirl-flow"/>
+          <path d="M336 92c26-16 58-8 64 12 4 14-8 24-17 18-7-5-5-15 4-15" stroke="#3f62c4" stroke-width="5.5" opacity=".6"/>
+          <path d="M-30 140C80 108 178 162 282 132 366 108 428 142 510 120" stroke="#2f4a9e" stroke-width="16" opacity=".55"/>
+          <path d="M-20 168C86 146 176 184 300 160 380 144 430 166 500 152" stroke="#4a68b8" stroke-width="3" opacity=".36"/>
+        </g>
+
+        <!-- 별: 치자빛 점과 무리 -->
+        <g fill="#f2c14e">
+          <circle cx="64" cy="30" r="3.4" class="twinkle"/><circle cx="64" cy="30" r="8" fill="none" stroke="#f2c14e" stroke-width="1" opacity=".3"/>
+          <circle cx="128" cy="62" r="2.4" class="twinkle b"/>
+          <circle cx="236" cy="34" r="4" class="twinkle c"/><circle cx="236" cy="34" r="9.5" fill="none" stroke="#f2c14e" stroke-width="1" opacity=".28"/>
+          <circle cx="286" cy="96" r="2.2" class="twinkle b"/>
+          <circle cx="196" cy="126" r="1.9" class="twinkle"/>
+          <circle cx="452" cy="118" r="2.6" class="twinkle c"/>
+        </g>
+
+        <!-- 달: 고흐의 무리진 달 -->
+        <circle cx="408" cy="36" r="30" fill="url(#moon-g)" opacity=".36"/>
+        <circle cx="408" cy="36" r="15" fill="#ffe9a8"/>
+        <circle cx="408" cy="36" r="21.5" fill="none" stroke="#f2c14e" stroke-width="1.3" opacity=".5"/>
+
+        <rect y="52" width="480" height="158" fill="url(#scrim-g)"/>
+
+        <!-- 기와 마을: 처마 끝이 살짝 들린 조선 지붕 -->
+        <g fill="#010308">
+          <path d="M-6 182Q8 198 40 174L96 174Q128 198 142 182L142 212-6 212Z"/>
+          <path d="M128 190Q140 202 166 184L214 184Q240 202 252 190L252 212 128 212Z"/>
+          <path d="M246 180Q262 198 300 172L370 172Q408 198 424 180L424 212 246 212Z"/>
+        </g>
+        <!-- 처마 끝에 스치는 달빛 -->
+        <g fill="none" stroke="#8fabf2" stroke-linecap="round" opacity=".6">
+          <path d="M-6 182Q8 198 40 174L96 174Q128 198 142 182" stroke-width="1.3"/>
+          <path d="M128 190Q140 202 166 184L214 184Q240 202 252 190" stroke-width="1.2"/>
+          <path d="M246 180Q262 198 300 172L370 172Q408 198 424 180" stroke-width="1.3"/>
+          <path d="M40 172h56M166 182h48M300 170h70" stroke-width="2.2" opacity=".8"/>
+        </g>
+        <!-- 고흐의 사이프러스이자 조선의 노송 — 지붕 너머 한 그루 -->
+        <path d="M436 212c-6-34 6-46 2-68-3-15 8-19 6-35 4 19 14 23 11 38-3 17 9 37 3 65Z" fill="#010308"/>
+        <path d="M434 132c-4-11 4-16 3-27" fill="none" stroke="#8fabf2" stroke-width="1.1" opacity=".45"/>
+      </svg>
+      <div class="sky-body">
+        <div class="t-label">전체 남은 선금</div>
+        <div class="t-amount" id="home-total">0원</div>
+        <div class="t-region" id="home-region"></div>
+      </div>
     </div>
 
     <div class="card nl-box">
       <textarea id="nl-input" placeholder="문장으로 입력해 보세요&#10;예) 강경불고기에 오늘 12000원 사용했어" enterkeyhint="done"></textarea>
-      <div class="nl-hint">💬 음식점명·금액·날짜를 알아들어요 · 등록된 음식점만 기록돼요</div>
-      <div class="row" style="margin-top:8px;">
-        <button class="btn small" id="btn-nl-voice">🎤 말로 입력</button>
+      <div class="nl-rule"></div>
+      <div class="nl-hint"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-speech"/></svg><span>음식점명·금액·날짜를 알아들어요 · 등록된 음식점만 기록돼요</span></div>
+      <div class="row" style="margin-top:10px;">
+        <button class="btn small ghost" id="btn-nl-voice"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-mic"/></svg><span class="v-label">말로 입력</span></button>
         <button class="btn small" id="btn-nl-parse">인식하기</button>
       </div>
     </div>
@@ -273,13 +601,13 @@
 
     <div class="label">내 음식점</div>
     <div id="home-stores"></div>
-    <button class="btn ghost" id="btn-home-add-store">+ 음식점 등록</button>
+    <button class="btn ghost" id="btn-home-add-store"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-plus"/></svg>음식점 등록</button>
   </section>
 
   <!-- ② 입력 (현황의 음식점 카드 → 사용/충전 버튼으로 진입) -->
   <section class="screen" id="screen-input">
     <div class="input-head">
-      <button id="btn-input-back" aria-label="현황으로 돌아가기">‹</button>
+      <button id="btn-input-back" aria-label="현황으로 돌아가기"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-back"/></svg></button>
       <h1>기록하기</h1>
     </div>
     <p class="sub">음식점을 고르고 금액을 누르면 끝!</p>
@@ -300,7 +628,7 @@
       <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
       <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
       <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
-      <button data-k="00">00</button><button data-k="0">0</button><button data-k="back">⌫</button>
+      <button data-k="00">00</button><button data-k="0">0</button><button data-k="back" aria-label="지우기"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-erase"/></svg></button>
     </div>
 
     <div class="row">
@@ -322,10 +650,10 @@
     <h1>관리</h1>
     <div class="label">음식점 관리</div>
     <div class="card mgmt-list" id="mgmt-stores"></div>
-    <button class="btn ghost" id="btn-hist-add-store">+ 음식점 등록</button>
+    <button class="btn ghost" id="btn-hist-add-store"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-plus"/></svg>음식점 등록</button>
 
     <div class="label" style="margin-top:24px;">사용이력</div>
-    <button class="btn ghost" id="btn-toggle-history">📋 사용이력 보기</button>
+    <button class="btn ghost" id="btn-toggle-history"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-scroll"/></svg><span class="h-label">사용이력 보기</span></button>
     <div id="history-wrap" style="display:none;">
       <p class="sub">기록을 누르면 수정·삭제할 수 있어요</p>
       <div class="label">음식점 필터</div>
@@ -336,13 +664,13 @@
     <div class="label" style="margin-top:24px;">데이터 관리</div>
     <div class="card">
       <div class="row">
-        <button class="btn small ghost" id="btn-backup">📤 백업(내보내기)</button>
-        <button class="btn small ghost" id="btn-restore">📥 복원(가져오기)</button>
+        <button class="btn small ghost" id="btn-backup"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-export"/></svg><span>백업(내보내기)</span></button>
+        <button class="btn small ghost" id="btn-restore"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-import"/></svg><span>복원(가져오기)</span></button>
       </div>
       <input type="file" id="restore-file" accept=".json,application/json" style="display:none;">
       <div class="row" style="margin-top:8px;">
         <button class="btn small gray" id="btn-change-region">지역 변경</button>
-        <button class="btn small gray" id="btn-reset" style="color:var(--red); border-color:var(--red);">전체 초기화</button>
+        <button class="btn small gray" id="btn-reset" style="color:var(--dancheong); border-color:var(--dancheong);">전체 초기화</button>
       </div>
       <div class="nl-hint" style="margin-top:10px;">현재 지역: <span id="mgmt-region"></span> · 데이터는 이 기기에만 저장됩니다</div>
     </div>
@@ -350,8 +678,8 @@
 
   <!-- 하단 탭바 (입력 화면은 현황의 음식점 카드에서 진입) -->
   <nav id="tabbar">
-    <button data-screen="screen-home" class="on"><span class="ico">🏠</span>현황</button>
-    <button data-screen="screen-manage"><span class="ico">⚙️</span>관리</button>
+    <button data-screen="screen-home" class="on"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-home"/></svg><span>현황</span></button>
+    <button data-screen="screen-manage"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-brush"/></svg><span>관리</span></button>
   </nav>
 
   <!-- 음식점 등록 모달 -->
@@ -626,6 +954,7 @@ function showScreen(id) {
   document.getElementById(id).classList.add('active');
   document.querySelectorAll('#tabbar button').forEach(b => b.classList.toggle('on', b.dataset.screen === id));
   document.getElementById('tabbar').classList.toggle('show', id !== 'screen-setup');
+  document.getElementById('appbar').classList.toggle('show', id !== 'screen-setup');
   if (id === 'screen-home') renderHome();
   if (id === 'screen-input') renderInput();
   if (id === 'screen-manage') renderManage();
@@ -664,7 +993,9 @@ const HOME_TX_LIMIT = 8;            // 카드 안에 보여줄 최근 내역 개
 
 function renderHome() {
   document.getElementById('home-total').textContent = comma(totalBalance()) + '원';
-  document.getElementById('home-region').textContent = '📍 ' + (db.settings.region || '');
+  const rgEl = document.getElementById('home-region');
+  rgEl.innerHTML = '<svg class="i" aria-hidden="true" focusable="false"><use href="#i-pin"/></svg><span class="t-region-name"></span>';
+  rgEl.querySelector('.t-region-name').textContent = db.settings.region || '';
 
   const wrap = document.getElementById('home-stores');
   if (db.stores.length === 0) {
@@ -682,9 +1013,10 @@ function renderHome() {
     div.className = 'card store-card' + (open ? ' open' : '');
     div.innerHTML =
       '<div class="sc-head">' +
-        '<div><div class="s-name"><span class="s-arrow">▶</span><span class="s-name-text"></span></div><div class="s-meta"></div></div>' +
-        '<div><div class="s-bal-label">잔액</div><div class="s-bal' + (bal < 0 ? ' minus' : '') + '">' + comma(bal) + '원</div></div>' +
+        '<div class="s-name"><svg class="s-arrow" aria-hidden="true" focusable="false"><use href="#i-chevron"/></svg><span class="s-name-text"></span></div>' +
+        '<div class="s-bal-wrap"><div class="s-bal-label">잔액</div><div class="s-bal' + (bal < 0 ? ' minus' : '') + '">' + comma(bal) + '원</div></div>' +
       '</div>' +
+      '<div class="s-meta"></div>' +
       '<div class="sc-tx"></div>';
     div.querySelector('.s-name-text').textContent = s.name;
     div.querySelector('.s-meta').textContent = (s.dong ? s.dong + ' · ' : '') + (last ? '최근 사용 ' + last : '사용 기록 없음');
@@ -704,7 +1036,7 @@ function renderHome() {
           const row = document.createElement('div');
           row.className = 't-row';
           row.innerHTML =
-            '<div class="t-info"><div class="t-type">' + (t.type === '충전' ? '💰 충전' : '🍽️ 사용') + '</div><div class="t-date"></div></div>' +
+            '<div class="t-info"><div class="t-type">' + (t.type === '충전' ? '<svg class="i" aria-hidden="true" focusable="false"><use href="#i-coin"/></svg>충전' : '<svg class="i" aria-hidden="true" focusable="false"><use href="#i-meal"/></svg>사용') + '</div><div class="t-date"></div></div>' +
             '<div class="t-amt ' + (t.type === '충전' ? 'charge' : 'use') + '">' + (t.type === '충전' ? '+' : '−') + comma(t.amount) + '원</div>';
           row.querySelector('.t-date').textContent = t.date + (t.memo ? ' · ' + t.memo : '') + ' · ' + t.inputMethod;
           txWrap.appendChild(row);
@@ -719,9 +1051,11 @@ function renderHome() {
       // 펼친 상태에서 바로 기록 (사용/충전)
       const actions = document.createElement('div');
       actions.className = 'sc-actions';
-      const mkBtn = (label, type) => {
+      const mkBtn = (label, type, iconId, cls) => {
         const b = document.createElement('button');
-        b.textContent = label;
+        b.className = cls;
+        b.innerHTML = '<svg class="i" aria-hidden="true" focusable="false"><use href="#' + iconId + '"/></svg><span></span>';
+        b.querySelector('span').textContent = label;
         b.addEventListener('click', e => {
           e.stopPropagation();               // 카드 접힘 방지
           inputState.storeId = s.id;
@@ -731,8 +1065,8 @@ function renderHome() {
         });
         return b;
       };
-      actions.appendChild(mkBtn('🍽️ 사용 입력', '사용'));
-      actions.appendChild(mkBtn('💰 충전 입력', '충전'));
+      actions.appendChild(mkBtn('사용 입력', '사용', 'i-meal', 'use-btn'));
+      actions.appendChild(mkBtn('충전 입력', '충전', 'i-coin', 'charge-btn'));
       txWrap.appendChild(actions);
     }
 
@@ -766,7 +1100,8 @@ let voiceRec = null, voiceOn = false;
 const voiceBtn = document.getElementById('btn-nl-voice');
 function setVoiceUI(on) {
   voiceOn = on;
-  voiceBtn.textContent = on ? '🔴 듣는 중… 탭하여 완료' : '🎤 말로 입력';
+  voiceBtn.classList.toggle('listening', on);
+  voiceBtn.querySelector('.v-label').textContent = on ? '듣는 중… 탭하여 완료' : '말로 입력';
 }
 voiceBtn.addEventListener('click', () => {
   if (!SpeechRec) { toast('이 브라우저는 음성 입력을 지원하지 않아요. 키보드의 마이크 키를 이용해 주세요'); return; }
@@ -814,19 +1149,19 @@ function renderNLConfirm() {
   if (!r.store) {
     // 등록된 음식점만 기록 가능 — 미등록 가게는 오류로 안내
     warn += r.freeName
-      ? '<div class="c-warn">⚠️ 「<span class="w-name"></span>」은(는) 등록된 음식점에 없어요. 먼저 음식점을 등록해 주세요.</div>'
-      : '<div class="c-warn">⚠️ 음식점을 인식하지 못했어요. 등록된 음식점 이름으로 말해 주세요.</div>';
+      ? '<div class="c-warn"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-warn"/></svg><span>「<span class="w-name"></span>」은(는) 등록된 음식점에 없어요. 먼저 음식점을 등록해 주세요.</span></div>'
+      : '<div class="c-warn"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-warn"/></svg><span>음식점을 인식하지 못했어요. 등록된 음식점 이름으로 말해 주세요.</span></div>';
   }
-  if (!r.amount) warn += '<div class="c-warn">⚠️ 금액을 인식하지 못했어요. 문장을 고쳐 다시 인식해 주세요</div>';
-  if (overUse) warn += '<div class="c-warn">⚠️ 충전 잔액(' + comma(bal) + '원)보다 많이 사용할 수 없어요</div>';
-  if (r.store && r.fuzzy) warn += '<div class="c-note">📌 등록된 음식점 중 가장 비슷한 이름으로 인식했어요. 다른 가게라면 [취소]해 주세요.</div>';
+  if (!r.amount) warn += '<div class="c-warn"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-warn"/></svg><span>금액을 인식하지 못했어요. 문장을 고쳐 다시 인식해 주세요</span></div>';
+  if (overUse) warn += '<div class="c-warn"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-warn"/></svg><span>충전 잔액(' + comma(bal) + '원)보다 많이 사용할 수 없어요</span></div>';
+  if (r.store && r.fuzzy) warn += '<div class="c-note"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-info"/></svg><span>등록된 음식점 중 가장 비슷한 이름으로 인식했어요. 다른 가게라면 [취소]해 주세요.</span></div>';
 
   wrap.innerHTML =
     '<div class="card confirm-card">' +
-      '<div class="c-title">' + (canSave ? '✅ 이렇게 기록할까요?' : '⚠️ 확인이 필요해요') + '</div>' +
+      '<div class="c-title">' + (canSave ? '<svg class="i" aria-hidden="true" focusable="false"><use href="#i-check"/></svg>이렇게 기록할까요?' : '<svg class="i" aria-hidden="true" focusable="false"><use href="#i-warn"/></svg>확인이 필요해요') + '</div>' +
       '<table>' +
-        '<tr><td>음식점</td><td><b></b><span class="sr-dong" style="color:var(--gray-text);font-size:13px;"></span></td></tr>' +
-        '<tr><td>유형</td><td>' + (r.type === '충전' ? '💰 충전' : '🍽️ 사용') + '</td></tr>' +
+        '<tr><td>음식점</td><td><b></b><span class="sr-dong" style="color:var(--ink-soft);font-size:13px;"></span></td></tr>' +
+        '<tr><td>유형</td><td><span class="c-cell">' + (r.type === '충전' ? '<svg class="i" aria-hidden="true" focusable="false"><use href="#i-coin"/></svg>충전' : '<svg class="i" aria-hidden="true" focusable="false"><use href="#i-meal"/></svg>사용') + '</span></td></tr>' +
         '<tr><td>금액</td><td><b>' + (r.amount ? comma(r.amount) + '원' : '-') + '</b></td></tr>' +
         (r.store ? '<tr><td>잔액</td><td>' + comma(bal) + '원</td></tr>' : '') +
         '<tr><td>날짜</td><td>' + r.date + '</td></tr>' +
@@ -861,7 +1196,7 @@ function renderNLConfirm() {
     renderNLConfirm();
     expandedStores.add(store.id);   // 기록된 음식점 카드를 펼쳐서 바로 보여줌
     renderHome();
-    toast('✅ ' + store.name + ' ' + comma(r.amount) + '원 ' + r.type + ' 기록 완료');
+    toast(store.name + ' ' + comma(r.amount) + '원 ' + r.type + ' 기록 완료');
   });
   const regBtn = document.getElementById('btn-nl-register');
   if (regBtn) regBtn.addEventListener('click', () => {
@@ -967,7 +1302,7 @@ document.getElementById('btn-save-tx').addEventListener('click', () => {
   const s = getStore(storeId);
   inputState.amount = '';
   document.getElementById('input-memo').value = '';
-  toast('✅ ' + s.name + ' ' + comma(amount) + '원 ' + inputState.type + ' 완료 (잔액 ' + comma(storeBalance(storeId)) + '원)');
+  toast(s.name + ' ' + comma(amount) + '원 ' + inputState.type + ' 완료 (잔액 ' + comma(storeBalance(storeId)) + '원)');
   expandedStores.add(storeId);      // 기록된 음식점 카드를 펼쳐서 바로 보여줌
   showScreen('screen-home');
 });
@@ -1029,7 +1364,7 @@ document.getElementById('btn-toggle-history').addEventListener('click', () => {
   const wrap = document.getElementById('history-wrap');
   const open = wrap.style.display === 'none';
   wrap.style.display = open ? '' : 'none';
-  document.getElementById('btn-toggle-history').textContent = open ? '📋 사용이력 닫기' : '📋 사용이력 보기';
+  document.getElementById('btn-toggle-history').querySelector('.h-label').textContent = open ? '사용이력 닫기' : '사용이력 보기';
   if (open) renderHistory();
 });
 
@@ -1046,8 +1381,8 @@ function renderManage() {
       const row = document.createElement('div');
       row.className = 'm-row';
       row.innerHTML =
-        '<div><b></b> <span class="sr-dong" style="color:var(--gray-text);font-size:13px;"></span>' +
-        '<div style="font-size:12px;color:var(--gray-text);">' + s.source + ' 등록 · 잔액 ' + comma(storeBalance(s.id)) + '원</div></div>' +
+        '<div><b></b> <span class="sr-dong" style="color:var(--ink-soft);font-size:13px;"></span>' +
+        '<div class="m-sub">' + s.source + ' 등록 · 잔액 ' + comma(storeBalance(s.id)) + '원</div></div>' +
         '<button class="btn small gray del">삭제</button>';
       row.querySelector('b').textContent = s.name;
       row.querySelector('.sr-dong').textContent = s.dong || '';
@@ -1262,13 +1597,14 @@ function renderStoreSearch(q) {
   if (live.status === 'loading') {
     const st = document.createElement('div');
     st.className = 'sr-status';
-    st.textContent = '🔍 ' + (regionGu() || '지역') + ' 실제 음식점을 찾는 중…';
+    st.innerHTML = '<svg class="i" aria-hidden="true" focusable="false"><use href="#i-search"/></svg><span></span>';
+    st.querySelector('span').textContent = (regionGu() || '지역') + ' 실제 음식점을 찾는 중…';
     wrap.appendChild(st);
   }
   if (live.status === 'error' && q) {
     const st = document.createElement('div');
     st.className = 'sr-status';
-    st.textContent = '⚠️ 실시간 검색이 안 돼요(오프라인?). 내장 목록에서만 찾는 중';
+    st.innerHTML = '<svg class="i" aria-hidden="true" focusable="false"><use href="#i-warn"/></svg><span>실시간 검색이 안 돼요(오프라인?). 내장 목록에서만 찾는 중</span>';
     wrap.appendChild(st);
   }
 

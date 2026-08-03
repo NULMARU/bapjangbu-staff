@@ -1,7 +1,7 @@
 // 밥장부 직원용 서비스워커 — 앱 셸 캐시(오프라인 실행) + 홈 화면 설치 지원.
 // 데이터는 localStorage에만 있으므로 여기서는 정적 파일만 다룬다.
 // 중계 서버 API(다른 출처)는 절대 캐시하지 않고 항상 네트워크로 보낸다.
-const CACHE = 'bapjangbu-staff-v1';
+const CACHE = 'bapjangbu-staff-v2';
 const ASSETS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png', './icon-maskable-512.png'];
 
 self.addEventListener('install', e => {
