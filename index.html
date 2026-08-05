@@ -2,6 +2,9 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
+<!-- GitHub Pages는 응답 헤더를 설정할 수 없으므로 CSP를 meta로 선언한다.
+     외부 스크립트·프레임·폼 전송을 금지하고, 통신은 밥장부 중계 서버로만 허용. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; connect-src 'self' https://prepaid-relay.sulsul-plus.workers.dev; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#1e2c63">
 <meta name="description" content="음식점 선금·사용액을 내 폰에서 간편하게 기록하는 밥장부 직원용 앱">
@@ -491,7 +494,7 @@
   <section class="screen" id="screen-setup">
     <svg class="seal" aria-hidden="true" focusable="false"><use href="#i-mark"/></svg>
     <h1>밥장부 직원용</h1>
-    <p class="sub">음식점 선금을 내 폰에서 간편하게 관리해요.<br>인적사항은 받지 않아요. 이용 지역만 알려주세요.</p>
+    <p class="sub">음식점 선금을 내 폰에서 간편하게 관리해요.<br>인적사항은 받지 않아요. 이용 지역만 알려주세요.<br>기록은 이 폰에만 저장되고 앱 잠금은 없어요 — 폰 잠금화면을 사용해 주세요.</p>
     <div class="card">
       <div class="label">이용 지역 (시·군·구)</div>
       <select id="setup-region">
@@ -595,6 +598,7 @@
         <button class="btn small ghost" id="btn-nl-voice"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-mic"/></svg><span class="v-label">말로 입력</span></button>
         <button class="btn small" id="btn-nl-parse">인식하기</button>
       </div>
+      <div class="nl-hint"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-info"/></svg><span>「말로 입력」은 브라우저의 음성인식 기능을 씁니다 — 말한 내용이 브라우저 제조사(구글·애플 등) 서버로 전송될 수 있어요. 원치 않으면 키보드로 입력해 주세요.</span></div>
     </div>
 
     <div id="nl-confirm"></div>
@@ -673,6 +677,7 @@
         <button class="btn small gray" id="btn-reset" style="color:var(--dancheong); border-color:var(--dancheong);">전체 초기화</button>
       </div>
       <div class="nl-hint" style="margin-top:10px;">현재 지역: <span id="mgmt-region"></span> · 데이터는 이 기기에만 저장됩니다</div>
+      <div class="nl-hint"><svg class="i" aria-hidden="true" focusable="false"><use href="#i-warn"/></svg><span>이 기록은 이 폰에만 저장되고 앱 자체 잠금은 없어요 — 폰을 빌려주면 그대로 보입니다. 폰 잠금화면을 꼭 사용하고, 폰을 바꿀 때는 백업 파일로 옮겨 주세요.</span></div>
     </div>
   </section>
 
@@ -777,16 +782,87 @@ const STORAGE_KEY = 'bapjangbu_staff_v1';
 
 let db = { settings: { region: null }, stores: [], transactions: [] };
 
+/* ===== 외부에서 들어온 데이터 정화 (백업 복원·저장소 손상 대비) =====
+   화면에 그리는 값은 반드시 여기를 통과한 것만 쓴다.
+   type·inputMethod·source는 허용값 집합으로 강제하고, 나머지 문자열은
+   제어문자·꺾쇠 제거 + 길이 제한을 건다(표시는 textContent지만 이중 방어). */
+const TX_TYPES = ['충전', '사용'];
+const INPUT_METHODS = ['버튼', '자연어'];
+const STORE_SOURCES = ['검색', '자유입력'];
+const LIMIT = { region: 40, name: 60, dong: 30, memo: 200, id: 64 };
+const MAX_AMOUNT = 100000000;   // 1억 원 — 개인 식대 기록의 현실적 상한
+
+function safeText(v, max) {
+  if (typeof v !== 'string') return '';
+  return v.replace(/[\u0000-\u001f\u007f<>]/g, '').trim().slice(0, max);
+}
+function safeId(v) {
+  return (typeof v === 'string' ? v : '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, LIMIT.id);
+}
+function safeDate(v) {
+  return (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) ? v : todayStr();
+}
+function safeAmount(v) {
+  const n = Math.floor(Number(v));
+  return (Number.isFinite(n) && n >= 0 && n <= MAX_AMOUNT) ? n : null;
+}
+function oneOf(v, allowed, fallback) { return allowed.indexOf(v) >= 0 ? v : fallback; }
+
+// 반환: { db, dropped } — 형식이 맞지 않아 버린 항목 수를 함께 알려준다. 형태가 아예 다르면 null.
+function sanitizeDB(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+  if (!data.settings || typeof data.settings !== 'object' ||
+      !Array.isArray(data.stores) || !Array.isArray(data.transactions)) return null;
+
+  let dropped = 0;
+  const out = {
+    settings: { region: safeText(data.settings.region, LIMIT.region) || null },
+    stores: [], transactions: []
+  };
+
+  const storeIds = new Set();
+  for (const raw of data.stores) {
+    if (!raw || typeof raw !== 'object') { dropped++; continue; }
+    const id = safeId(raw.id);
+    const name = safeText(raw.name, LIMIT.name);
+    if (!id || !name || storeIds.has(id)) { dropped++; continue; }
+    storeIds.add(id);
+    const s = {
+      id, name,
+      dong: safeText(raw.dong, LIMIT.dong),
+      source: oneOf(raw.source, STORE_SOURCES, '자유입력'),
+      createdAt: safeDate(raw.createdAt)
+    };
+    const rid = safeText(raw.restaurantId, LIMIT.id);
+    if (rid) s.restaurantId = rid;
+    out.stores.push(s);
+  }
+
+  const txIds = new Set();
+  for (const raw of data.transactions) {
+    if (!raw || typeof raw !== 'object') { dropped++; continue; }
+    const id = safeId(raw.id);
+    const storeId = safeId(raw.storeId);
+    const amount = safeAmount(raw.amount);
+    // 유형이 허용값이 아니면 충전인지 사용인지 알 수 없으므로 되살리지 않는다
+    if (!id || txIds.has(id) || !storeId || amount === null || TX_TYPES.indexOf(raw.type) < 0) { dropped++; continue; }
+    txIds.add(id);
+    out.transactions.push({
+      id, storeId, type: raw.type, amount,
+      date: safeDate(raw.date),
+      memo: safeText(raw.memo, LIMIT.memo),
+      inputMethod: oneOf(raw.inputMethod, INPUT_METHODS, '버튼')
+    });
+  }
+  return { db: out, dropped };
+}
+
 function loadDB() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object') {
-        db.settings = parsed.settings || { region: null };
-        db.stores = Array.isArray(parsed.stores) ? parsed.stores : [];
-        db.transactions = Array.isArray(parsed.transactions) ? parsed.transactions : [];
-      }
+      const clean = sanitizeDB(JSON.parse(raw));
+      if (clean) db = clean.db;
     }
   } catch (e) { /* 손상된 데이터는 무시하고 초기 상태로 시작 */ }
 }
@@ -822,8 +898,18 @@ function getStore(id) { return db.stores.find(s => s.id === id); }
 function findStoreByName(name) { return db.stores.find(s => s.name === name); }
 
 function addStore(name, dong, source, extra) {
+  // 이름·동명은 사용자 입력이거나 공공데이터 응답이다 — 저장 전에 한 번 정화한다
   // extra.restaurantId: 공공데이터 관리번호(LOCALDATA mgtNo) — 향후 밥장부 본체 연계 대비
-  const s = Object.assign({ id: uid(), name, dong: dong || '', source, createdAt: todayStr() }, extra || {});
+  const s = {
+    id: uid(),
+    name: safeText(name, LIMIT.name),
+    dong: safeText(dong, LIMIT.dong),
+    source: oneOf(source, STORE_SOURCES, '자유입력'),
+    createdAt: todayStr()
+  };
+  if (!s.name) return null;
+  const rid = safeText(extra && extra.restaurantId, LIMIT.id);
+  if (rid) s.restaurantId = rid;
   db.stores.push(s);
   saveDB();
   return s;
@@ -977,7 +1063,7 @@ document.getElementById('setup-region').addEventListener('change', e => {
 });
 document.getElementById('btn-setup-done').addEventListener('click', () => {
   const sel = document.getElementById('setup-region').value;
-  let region = sel === '__free__' ? document.getElementById('setup-free').value.trim() : sel.replace(/^서울 /, '');
+  let region = safeText(sel === '__free__' ? document.getElementById('setup-free').value : sel.replace(/^서울 /, ''), LIMIT.region);
   if (!region) { toast('이용 지역을 입력해 주세요'); return; }
   db.settings.region = region;
   saveDB();
@@ -1294,7 +1380,7 @@ document.getElementById('btn-save-tx').addEventListener('click', () => {
     return;
   }
   const date = document.getElementById('input-date').value || todayStr();
-  const memo = document.getElementById('input-memo').value.trim();
+  const memo = safeText(document.getElementById('input-memo').value, LIMIT.memo);
   db.transactions.push({
     id: uid(), storeId, type: inputState.type, amount, date, memo, inputMethod: '버튼'
   });
@@ -1350,8 +1436,9 @@ function renderHistory() {
         '<div><div class="x-store"></div>' + (t.memo ? '<div class="x-memo"></div>' : '') + '</div>' +
         '<div><div class="x-amount ' + (t.type === '충전' ? 'charge' : 'use') + '">' +
           (t.type === '충전' ? '+' : '−') + comma(t.amount) + '원</div>' +
-        '<div class="x-method">' + t.type + ' · ' + t.inputMethod + '</div></div>';
+        '<div class="x-method"></div></div>';
       div.querySelector('.x-store').textContent = s ? s.name : '(삭제된 음식점)';
+      div.querySelector('.x-method').textContent = t.type + ' · ' + t.inputMethod;   // 저장 값은 항상 textContent로
       if (t.memo) div.querySelector('.x-memo').textContent = t.memo;
       div.addEventListener('click', () => openTxModal(t.id));
       list.appendChild(div);
@@ -1382,10 +1469,11 @@ function renderManage() {
       row.className = 'm-row';
       row.innerHTML =
         '<div><b></b> <span class="sr-dong" style="color:var(--ink-soft);font-size:13px;"></span>' +
-        '<div class="m-sub">' + s.source + ' 등록 · 잔액 ' + comma(storeBalance(s.id)) + '원</div></div>' +
+        '<div class="m-sub"></div></div>' +
         '<button class="btn small gray del">삭제</button>';
       row.querySelector('b').textContent = s.name;
       row.querySelector('.sr-dong').textContent = s.dong || '';
+      row.querySelector('.m-sub').textContent = s.source + ' 등록 · 잔액 ' + comma(storeBalance(s.id)) + '원';   // 저장 값은 항상 textContent로
       row.querySelector('.del').addEventListener('click', () => {
         const cnt = db.transactions.filter(t => t.storeId === s.id).length;
         if (!confirm('「' + s.name + '」을(를) 삭제할까요?' + (cnt ? '\n관련 기록 ' + cnt + '건도 함께 삭제됩니다.' : ''))) return;
@@ -1435,7 +1523,7 @@ document.getElementById('btn-tx-save').addEventListener('click', () => {
   t.type = document.getElementById('tx-edit-type').value;
   t.amount = amount;
   t.date = document.getElementById('tx-edit-date').value || todayStr();
-  t.memo = document.getElementById('tx-edit-memo').value.trim();
+  t.memo = safeText(document.getElementById('tx-edit-memo').value, LIMIT.memo);
   saveDB();
   document.getElementById('modal-tx').classList.remove('show');
   renderHistory();
@@ -1716,15 +1804,20 @@ document.getElementById('restore-file').addEventListener('change', e => {
   const reader = new FileReader();
   reader.onload = () => {
     try {
-      const data = JSON.parse(reader.result);
-      if (!data || !data.settings || !Array.isArray(data.stores) || !Array.isArray(data.transactions)) {
-        toast('올바른 백업 파일이 아니에요'); return;
+      // 백업 파일은 외부 입력이다 — 필드 화이트리스트를 통과한 값만 받아들인다
+      const clean = sanitizeDB(JSON.parse(reader.result));
+      if (!clean) { toast('올바른 백업 파일이 아니에요'); return; }
+      const fresh = clean.db, dropped = clean.dropped;
+      if (dropped && fresh.stores.length === 0 && fresh.transactions.length === 0) {
+        toast('백업 파일 내용을 읽을 수 없어요 (형식이 맞지 않아요)'); return;
       }
-      if (!confirm('현재 데이터를 백업 파일 내용으로 덮어쓸까요?\n(음식점 ' + data.stores.length + '곳, 기록 ' + data.transactions.length + '건)')) return;
-      db = data;
+      if (!confirm('현재 데이터를 백업 파일 내용으로 덮어쓸까요?\n(음식점 ' + fresh.stores.length + '곳, 기록 ' + fresh.transactions.length + '건'
+        + (dropped ? ', 형식 오류로 제외 ' + dropped + '건' : '') + ')')) return;
+      db = fresh;
       saveDB();
+      refreshCurrent();
       renderHistory();
-      toast('복원 완료');
+      toast(dropped ? '복원 완료 (형식이 맞지 않는 ' + dropped + '건은 제외했어요)' : '복원 완료');
     } catch (err) { toast('파일을 읽지 못했어요'); }
   };
   reader.readAsText(file);
@@ -1733,8 +1826,9 @@ document.getElementById('restore-file').addEventListener('change', e => {
 document.getElementById('btn-change-region').addEventListener('click', () => {
   const r = prompt('새 이용 지역(시·군·구)을 입력해 주세요', db.settings.region || '');
   if (r === null) return;
-  if (!r.trim()) { toast('지역을 입력해 주세요'); return; }
-  db.settings.region = r.trim();
+  const region = safeText(r, LIMIT.region);
+  if (!region) { toast('지역을 입력해 주세요'); return; }
+  db.settings.region = region;
   saveDB();
   renderHistory();
   toast('지역을 「' + db.settings.region + '」(으)로 변경했어요');
